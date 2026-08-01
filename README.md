@@ -1,34 +1,34 @@
 # 지구뿌수기 (EarthSmasher)
 
-Unity 모바일 게임 — 지구를 부수는 캐주얼/액션 타이틀.
+Unity 모바일 — 생생한 지구에 운석을 떨어뜨려 부수는 게임.
 
-## 프로젝트 구조
+## 지금 Play로 되는 것
+
+1. Unity Hub에서 **3D (Built-in)** 로 이 폴더 열기
+2. 빈 씬에 `MeteorImpactBootstrap` 붙이기
+3. Play → 지구 탭
+
+포함: 2K 지구 텍스처, 구름, 야간광, 운석 트레일, 충격파, 크레이터, 지각 파괴, HUD
+
+세팅 상세: [Docs/MeteorImpactPrototype.md](Docs/MeteorImpactPrototype.md)
+
+## 구조
 
 ```
 Assets/
+  Resources/Earth/   # day / night / clouds
   Scripts/
-    Core/       # 게임 매니저, 상태, 공통 유틸
-    Gameplay/   # 지구/파괴/입력 등 핵심 플레이
-    UI/         # HUD, 메뉴, 결과 화면
-    Systems/    # 세이브, 오디오, 광고 등 시스템
-  Scenes/
-  Prefabs/
-  Art/
-  Audio/
-  Resources/
-Docs/           # 기획안·디자인 문서
+    Core/            # Bootstrap
+    Gameplay/        # Earth, Meteor, Fracture, VFX
+    UI/              # ImpactHud
+Docs/
 ```
-
-## 시작 방법
-
-1. Unity Hub에서 이 폴더를 프로젝트로 추가 (권장: Unity 6 LTS 또는 2022.3 LTS)
-2. Android / iOS 빌드 모듈 설치
-3. 기획안을 `Docs/`에 넣은 뒤 스크립트 구현 시작
 
 ## 상태
 
-- [x] 폴더 / Git 초기화
-- [x] GitHub 원격 저장소
-- [ ] 기획안 반영
-- [ ] Unity 프로젝트 생성 (Hub에서 생성 또는 기존 템플릿 연결)
-- [ ] 스크립트 구현
+- [x] GitHub 레포
+- [x] 운석 낙하 프로토타입
+- [x] 고해상도 지구 텍스처
+- [x] Fracture + 임팩트 VFX
+- [ ] Unity Hub로 씬 저장 / 모바일 빌드
+- [ ] 본격 Destructible Mesh 에셋

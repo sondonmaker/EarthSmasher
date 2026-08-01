@@ -1,0 +1,199 @@
+using UnityEngine;
+
+/// <summary>
+/// 지구 시각 레이어 — 실데이터(물 마스크 / 자기극 오로라 타원) 기반.
+/// </summary>
+public class EarthLayerController : MonoBehaviour
+{
+    [Header("Layers")]
+    [SerializeField] GameObject crust;
+    [SerializeField] GameObject ocean;
+    [SerializeField] GameObject clouds;
+    [SerializeField] GameObject atmosphere;
+    [SerializeField] GameObject aurora;
+
+    [Header("Debug markers (자기극)")]
+    [SerializeField] bool showMagneticPoles = true;
+
+    [Header("State")]
+    public bool oceanEnabled = true;
+    public bool cloudsEnabled = true;
+    public bool atmosphereEnabled = true;
+    public bool auroraEnabled = true;
+    public bool nightLightsEnabled = true;
+
+    [Range(0f, 1f)] public float oceanStrength = 0.65f;
+    [Range(0f, 1f)] public float cloudsStrength = 0.55f;
+    [Range(0f, 1f)] public float atmosphereStrength = 0.45f;
+    [Range(0f, 1f)] public float auroraStrength = 0.85f;
+    [Range(0f, 2f)] public float nightLightsStrength = 0.85f;
+
+    /// <summary>자기 활동 — 타원 확장을 흉내 (0=조용, 1=폭풍)</summary>
+    [Range(0f, 1f)] public float geomagneticActivity = 0.25f;
+
+    Renderer _oceanRend;
+    Renderer _cloudsRend;
+    Renderer _atmosphereRend;
+    Renderer _auroraRend;
+    Material _crustMat;
+    Color _nightEmissionBase = new Color(1.1f, 1f, 0.85f);
+    Transform _poleN;
+    Transform _poleS;
+    float _baseAuroraEmission = 2.2f;
+
+    public void Bind(
+        GameObject crustGo,
+        GameObject oceanGo,
+        GameObject cloudsGo,
+        GameObject atmosphereGo,
+        GameObject auroraGo)
+    {
+        crust = crustGo;
+        ocean = oceanGo;
+        clouds = cloudsGo;
+        atmosphere = atmosphereGo;
+        aurora = auroraGo;
+
+        _oceanRend = ocean != null ? ocean.GetComponent<Renderer>() : null;
+        _cloudsRend = clouds != null ? clouds.GetComponent<Renderer>() : null;
+        _atmosphereRend = atmosphere != null ? atmosphere.GetComponent<Renderer>() : null;
+        _auroraRend = aurora != null ? aurora.GetComponent<Renderer>() : null;
+
+        var crustRend = crust != null ? crust.GetComponent<Renderer>() : null;
+        if (crustRend != null)
+            _crustMat = crustRend.material;
+
+        BuildMagneticPoleMarkers();
+        ApplyAll();
+    }
+
+    void BuildMagneticPoleMarkers()
+    {
+        if (!showMagneticPoles || crust == null) return;
+
+        _poleN = CreatePoleMarker("MagneticNorth", EarthGeo.MagneticNorthLat, EarthGeo.MagneticNorthLon, new Color(0.3f, 1f, 0.6f));
+        _poleS = CreatePoleMarker("MagneticSouth", EarthGeo.MagneticSouthLat, EarthGeo.MagneticSouthLon, new Color(0.5f, 0.7f, 1f));
+    }
+
+    Transform CreatePoleMarker(string name, float lat, float lon, Color color)
+    {
+        var go = GameObject.CreatePrimitive(PrimitiveType.Sphere);
+        go.name = name;
+        Destroy(go.GetComponent<Collider>());
+        go.transform.SetParent(crust.transform, false);
+        go.transform.localPosition = EarthGeo.LatLonToDirection(lat, lon) * 0.52f;
+        go.transform.localScale = Vector3.one * 0.035f;
+        var rend = go.GetComponent<Renderer>();
+        rend.material = RuntimeMaterial.Opaque(color, 2.5f);
+        rend.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+        return go.transform;
+    }
+
+    void Update()
+    {
+        if (!auroraEnabled || _auroraRend == null) return;
+
+        // 약한 숨쉬기 + 자기활동에 따른 밝기
+        float pulse = 0.8f + 0.2f * Mathf.Sin(Time.time * 1.4f);
+        float activity = Mathf.Lerp(0.65f, 1.35f, geomagneticActivity);
+        float e = _baseAuroraEmission * auroraStrength * pulse * activity;
+        var mat = _auroraRend.material;
+        if (mat.HasProperty("_EmissionColor"))
+            mat.SetColor("_EmissionColor", new Color(0.45f, 1f, 0.7f) * e);
+
+        Color c = mat.HasProperty("_Color") ? mat.GetColor("_Color") : mat.color;
+        c.a = Mathf.Clamp01(auroraStrength * 0.9f * pulse);
+        if (mat.HasProperty("_Color")) mat.SetColor("_Color", c);
+        mat.color = c;
+    }
+
+    public void ApplyAll()
+    {
+        SetActive(ocean, oceanEnabled);
+        SetActive(clouds, cloudsEnabled);
+        SetActive(atmosphere, atmosphereEnabled);
+        SetActive(aurora, auroraEnabled);
+        if (_poleN != null) _poleN.gameObject.SetActive(showMagneticPoles && auroraEnabled);
+        if (_poleS != null) _poleS.gameObject.SetActive(showMagneticPoles && auroraEnabled);
+
+        if (_oceanRend != null)
+            SetLayerAlpha(_oceanRend, oceanStrength * 0.75f, false);
+
+        if (_cloudsRend != null)
+            SetLayerAlpha(_cloudsRend, cloudsStrength * 0.7f, false);
+
+        if (_atmosphereRend != null)
+            SetLayerAlpha(_atmosphereRend, atmosphereStrength * 0.35f, false);
+
+        ApplyNightLights();
+    }
+
+    void ApplyNightLights()
+    {
+        if (_crustMat == null) return;
+
+        if (nightLightsEnabled && _crustMat.HasProperty("_EmissionColor"))
+        {
+            _crustMat.EnableKeyword("_EMISSION");
+            _crustMat.SetColor("_EmissionColor", _nightEmissionBase * nightLightsStrength);
+        }
+        else if (_crustMat.HasProperty("_EmissionColor"))
+        {
+            _crustMat.SetColor("_EmissionColor", Color.black);
+            _crustMat.DisableKeyword("_EMISSION");
+        }
+    }
+
+    static void SetActive(GameObject go, bool on)
+    {
+        if (go != null && go.activeSelf != on)
+            go.SetActive(on);
+    }
+
+    static void SetLayerAlpha(Renderer rend, float alpha, bool emissive)
+    {
+        if (rend == null) return;
+        var mat = rend.material;
+        alpha = Mathf.Clamp01(alpha);
+
+        if (mat.HasProperty("_Color"))
+        {
+            Color c = mat.GetColor("_Color");
+            c.a = alpha;
+            mat.SetColor("_Color", c);
+        }
+        else if (mat.HasProperty("_BaseColor"))
+        {
+            Color c = mat.GetColor("_BaseColor");
+            c.a = alpha;
+            mat.SetColor("_BaseColor", c);
+        }
+        else if (mat.HasProperty("_DeepColor"))
+        {
+            Color deep = mat.GetColor("_DeepColor");
+            deep.a = alpha * 0.55f;
+            mat.SetColor("_DeepColor", deep);
+            if (mat.HasProperty("_ShallowColor"))
+            {
+                Color shallow = mat.GetColor("_ShallowColor");
+                shallow.a = alpha * 0.42f;
+                mat.SetColor("_ShallowColor", shallow);
+            }
+        }
+        else if (mat.HasProperty("_Opacity"))
+        {
+            mat.SetFloat("_Opacity", alpha);
+        }
+        else if (mat.HasProperty("_Intensity"))
+        {
+            mat.SetFloat("_Intensity", alpha * 0.85f);
+        }
+
+        if (emissive && mat.HasProperty("_EmissionColor"))
+        {
+            mat.EnableKeyword("_EMISSION");
+            Color e = mat.HasProperty("_Color") ? mat.GetColor("_Color") : Color.white;
+            mat.SetColor("_EmissionColor", new Color(e.r, e.g, e.b) * (alpha * 2.5f));
+        }
+    }
+}
