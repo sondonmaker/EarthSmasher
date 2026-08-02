@@ -78,11 +78,11 @@ public static class EarthTextureLoader
         var mat = new Material(shader);
         mat.mainTexture = Clouds;
         mat.color = new Color(1f, 1f, 1f, 1f);
-        // 지금 룩 유지하되 양만 자연스럽게 줄임
-        mat.SetFloat("_Opacity", 1.2f);
-        mat.SetFloat("_AlphaBoost", 1.12f);
-        mat.SetFloat("_AlphaGamma", 1.2f); // 옅은 띠 조금 더 줄임
-        mat.SetFloat("_CoverageCut", 0.14f);
+        // 넓은 구름 뱅크 줄이고, 소용돌이 핵심만 남김
+        mat.SetFloat("_Opacity", 1.05f);
+        mat.SetFloat("_AlphaBoost", 1.0f);
+        mat.SetFloat("_AlphaGamma", 1.75f);
+        mat.SetFloat("_CoverageCut", 0.28f);
         mat.SetFloat("_LightWrap", 0.35f);
         mat.SetFloat("_Volume", 0.28f);
         return mat;

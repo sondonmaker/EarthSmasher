@@ -23,7 +23,7 @@ public class EarthLayerController : MonoBehaviour
     public bool nightLightsEnabled = true;
 
     [Range(0f, 1f)] public float oceanStrength = 0.95f;
-    [Range(0f, 1f)] public float cloudsStrength = 0.72f;
+    [Range(0f, 1f)] public float cloudsStrength = 0.62f;
     [Range(0f, 1f)] public float atmosphereStrength = 0.5f;
     [Range(0f, 1f)] public float auroraStrength = 0.85f;
     [Range(0f, 2f)] public float nightLightsStrength = 0.85f;
@@ -126,7 +126,7 @@ public class EarthLayerController : MonoBehaviour
             float cloudA = Mathf.Lerp(0.55f, 1f, cloudsStrength);
             SetLayerAlpha(_cloudsRend, cloudA, false);
             if (_cloudsRend != null && _cloudsRend.material != null && _cloudsRend.material.HasProperty("_Opacity"))
-                _cloudsRend.material.SetFloat("_Opacity", Mathf.Lerp(0.65f, 1.25f, cloudsStrength));
+                _cloudsRend.material.SetFloat("_Opacity", Mathf.Lerp(0.55f, 1.1f, cloudsStrength));
             var childRends = clouds.GetComponentsInChildren<Renderer>(true);
             for (int i = 0; i < childRends.Length; i++)
             {

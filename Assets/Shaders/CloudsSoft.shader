@@ -80,8 +80,11 @@ Shader "EarthSmasher/CloudsSoft"
                 density = saturate((density - _CoverageCut) / max(1e-3, 1.0 - _CoverageCut));
                 density = saturate(pow(density * _AlphaBoost, _AlphaGamma));
 
-                // 두꺼운 곳만 밝고, 얇은 띠는 반투명
-                float thick = saturate(smoothstep(0.35, 0.9, density));
+                // 넓은 뭉침(뱅크) 깨기: 중간 밀도는 거의 투명, 가장 진한 핵심만 남김
+                float peak = saturate(pow(density, 2.4));
+                float broken = lerp(density * 0.28, peak, peak);
+
+                float thick = saturate(smoothstep(0.45, 0.95, broken));
 
                 float3 n = normalize(i.worldNormal);
                 float3 lightDir = normalize(_WorldSpaceLightPos0.xyz);
@@ -92,7 +95,7 @@ Shader "EarthSmasher/CloudsSoft"
                 float3 nightCol = _Color.rgb * float3(0.32, 0.38, 0.48);
                 float3 col = lerp(nightCol, dayCol, ndotl);
 
-                float alpha = saturate(density * _Opacity * _Color.a);
+                float alpha = saturate(broken * _Opacity * _Color.a);
                 return float4(col, alpha);
             }
             ENDCG
