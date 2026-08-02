@@ -4,7 +4,8 @@
 |------|----------------|
 | `earth_day.jpg` | NASA Blue Marble style (webgl-earth) |
 | `earth_night.jpg` | Solar System Scope / city lights |
-| `earth_clouds.jpg` | Solar System Scope |
+| `earth_clouds.jpg` | Solar System Scope (fallback) |
+| `earth_clouds_4k.png` | [webgl-earth fair_clouds_4k](https://github.com/turban/webgl-earth) |
 | `earth_water.png` | three-globe water mask (ocean vs land) |
 | `earth_topology.png` | three-globe topology |
 

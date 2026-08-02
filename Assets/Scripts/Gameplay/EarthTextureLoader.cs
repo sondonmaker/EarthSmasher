@@ -7,7 +7,14 @@ public static class EarthTextureLoader
 {
     public static Texture2D Day => Load("Earth/earth_day");
     public static Texture2D Night => Load("Earth/earth_night");
-    public static Texture2D Clouds => Load("Earth/earth_clouds");
+    public static Texture2D Clouds
+    {
+        get
+        {
+            var hi = Load("Earth/earth_clouds_4k");
+            return hi != null ? hi : Load("Earth/earth_clouds");
+        }
+    }
     public static Texture2D Water => Load("Earth/earth_water");
     public static Texture2D Topology => Load("Earth/earth_topology");
 
@@ -44,13 +51,23 @@ public static class EarthTextureLoader
 
     public static Material CreateCloudMaterial()
     {
+        return BuildCloudMaterial(1.35f, 0.78f, 0.1f, 1.5f, Vector2.zero, Vector2.one);
+    }
+
+    /// <summary>두 번째 구름층 — UV 오프셋으로 더 풍성하게.</summary>
+    public static Material CreateCloudDetailMaterial()
+    {
+        return BuildCloudMaterial(0.85f, 0.95f, 0.18f, 1.25f, new Vector2(0.17f, 0.08f), new Vector2(1.35f, 1.35f));
+    }
+
+    static Material BuildCloudMaterial(float opacity, float softness, float threshold, float contrast, Vector2 offset, Vector2 tiling)
+    {
         var shader = Shader.Find("EarthSmasher/CloudsSoft");
         if (shader == null)
         {
-            // 폴백
             var fallback = new Material(Shader.Find("Standard"));
             fallback.mainTexture = Clouds;
-            fallback.color = new Color(1f, 1f, 1f, 0.6f);
+            fallback.color = new Color(1f, 1f, 1f, Mathf.Clamp01(opacity * 0.55f));
             SetTransparent(fallback);
             return fallback;
         }
@@ -58,9 +75,13 @@ public static class EarthTextureLoader
         var mat = new Material(shader);
         mat.mainTexture = Clouds;
         mat.color = new Color(1f, 1f, 1f, 1f);
-        mat.SetFloat("_Opacity", 0.9f);
-        mat.SetFloat("_Softness", 1.25f);
-        mat.SetFloat("_LightWrap", 0.4f);
+        mat.SetFloat("_Opacity", opacity);
+        mat.SetFloat("_Softness", softness);
+        mat.SetFloat("_Threshold", threshold);
+        mat.SetFloat("_Contrast", contrast);
+        mat.SetFloat("_LightWrap", 0.5f);
+        mat.mainTextureOffset = offset;
+        mat.mainTextureScale = tiling;
         return mat;
     }
 

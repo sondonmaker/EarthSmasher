@@ -4,9 +4,11 @@ Shader "EarthSmasher/CloudsSoft"
     {
         _MainTex ("Cloud Map", 2D) = "white" {}
         _Color ("Tint", Color) = (1,1,1,1)
-        _Opacity ("Opacity", Range(0, 1.5)) = 0.85
-        _Softness ("Softness", Range(0.2, 4)) = 1.35
-        _LightWrap ("Light Wrap", Range(0, 1)) = 0.35
+        _Opacity ("Opacity", Range(0, 2)) = 1.25
+        _Softness ("Softness", Range(0.2, 4)) = 0.85
+        _Threshold ("Coverage Threshold", Range(0, 0.6)) = 0.12
+        _Contrast ("Contrast", Range(0.5, 3)) = 1.45
+        _LightWrap ("Light Wrap", Range(0, 1)) = 0.45
     }
 
     SubShader
@@ -37,6 +39,8 @@ Shader "EarthSmasher/CloudsSoft"
             float4 _Color;
             float _Opacity;
             float _Softness;
+            float _Threshold;
+            float _Contrast;
             float _LightWrap;
 
             struct appdata
@@ -66,14 +70,21 @@ Shader "EarthSmasher/CloudsSoft"
             {
                 float4 tex = tex2D(_MainTex, i.uv);
                 float density = max(tex.r, max(tex.g, tex.b));
-                density = pow(saturate(density), _Softness);
+
+                // 얇은 구름도 살리고 두꺼운 부분은 더 하얗게
+                density = saturate((density - _Threshold) / max(1e-3, 1.0 - _Threshold));
+                density = saturate(pow(density, _Softness));
+                density = saturate(pow(density, 1.0 / max(0.2, _Contrast)));
 
                 float3 n = normalize(i.worldNormal);
                 float3 lightDir = normalize(_WorldSpaceLightPos0.xyz);
                 float ndotl = saturate(dot(n, lightDir) * (1.0 - _LightWrap) + _LightWrap);
 
-                float3 col = _Color.rgb * lerp(0.35, 1.0, ndotl);
-                float alpha = density * _Opacity * _Color.a;
+                // 낮 쪽은 밝은 흰 구름, 밤 쪽은 살짝 푸른 회색
+                float3 dayCol = _Color.rgb;
+                float3 nightCol = _Color.rgb * float3(0.55, 0.62, 0.75);
+                float3 col = lerp(nightCol, dayCol, ndotl);
+                float alpha = saturate(density * _Opacity * _Color.a);
                 return float4(col, alpha);
             }
             ENDCG
