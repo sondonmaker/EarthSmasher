@@ -3,17 +3,21 @@ using UnityEngine;
 
 /// <summary>
 /// 지구 메시를 판다. 같은 지점 반복 타격 시 누적.
-/// 메시 UV는 절대 교체하지 않음 (텍스처/투명 깨짐 방지).
+///
+/// HARD RULE: 지구 메시를 절대 리메시/UV 재생성하지 않는다.
+/// (BuildUvSphere 등으로 교체하면 day 맵 UV가 깨져 전체가 투명·이상해 보임)
+/// 허용: 기존 Unity Sphere 메시 복제 후 vertices만 이동.
 /// </summary>
 public class EarthCraterDeform : MonoBehaviour
 {
     [SerializeField] MeshFilter crustFilter;
     [SerializeField] float mergeAngleDeg = 10f;
-    [SerializeField] float maxDigDepth = 0.16f;
-    [SerializeField] float minShellRadius = 0.28f;
+    [SerializeField] float maxDigDepth = 0.12f;
+    [SerializeField] float minShellRadius = 0.36f;
 
     Mesh workingCrust;
-    Mesh workingOcean;
+    int lockedVertexCount;
+    int lockedUvCount;
     bool ready;
     readonly List<DigSite> sites = new List<DigSite>();
 
@@ -44,34 +48,47 @@ public class EarthCraterDeform : MonoBehaviour
         if (crustFilter == null)
             return;
 
-        // 기존 메시만 복제 — UV/텍스처 그대로
-        workingCrust = CloneWritableMesh(crustFilter, "EarthCrustDeform");
+        // 기존 메시만 복제 — UV/삼각형 레이아웃 그대로. 새 구체 생성 금지.
+        workingCrust = CloneWritableMeshPreserveUv(crustFilter, "EarthCrustDeform");
+        if (workingCrust == null)
+            return;
+
+        lockedVertexCount = workingCrust.vertexCount;
+        lockedUvCount = workingCrust.uv != null ? workingCrust.uv.Length : 0;
+        if (lockedUvCount == 0 || lockedUvCount != lockedVertexCount)
+        {
+            Debug.LogError("[EarthCraterDeform] Earth mesh missing UVs — dig disabled to avoid transparent planet.");
+            workingCrust = null;
+            return;
+        }
 
         var col = GetComponent<MeshCollider>();
-        if (col != null && workingCrust != null)
+        if (col != null)
             col.sharedMesh = workingCrust;
 
-        workingOcean = CloneChildWritableMesh("Ocean");
         ready = true;
     }
 
-    Mesh CloneWritableMesh(MeshFilter mf, string name)
+    /// <summary>기존 MeshFilter 메시만 Instantiate. UV 재작성/리메시 절대 금지.</summary>
+    static Mesh CloneWritableMeshPreserveUv(MeshFilter mf, string name)
     {
         if (mf == null || mf.sharedMesh == null)
             return null;
-        var m = Object.Instantiate(mf.sharedMesh);
+
+        Mesh src = mf.sharedMesh;
+        // 안전: 소스에 UV가 없으면 복제하지 않음
+        if (src.uv == null || src.uv.Length == 0 || src.uv.Length != src.vertexCount)
+        {
+            Debug.LogError("[EarthCraterDeform] Refusing clone — source mesh has broken UVs.");
+            return null;
+        }
+
+        var m = Object.Instantiate(src);
         m.name = name;
         m.MarkDynamic();
+        // UV는 Instantiate로 이미 복사됨. 절대 m.uv = ... 하지 말 것.
         mf.mesh = m;
         return m;
-    }
-
-    Mesh CloneChildWritableMesh(string childName)
-    {
-        var tf = transform.Find(childName);
-        if (tf == null)
-            return null;
-        return CloneWritableMesh(tf.GetComponent<MeshFilter>(), childName + "Deform");
     }
 
     public void Stamp(Vector3 worldPoint, float radiusNorm, float depthNorm)
@@ -90,6 +107,13 @@ public class EarthCraterDeform : MonoBehaviour
         if (workingCrust == null)
             return 0;
 
+        // UV 잠금 깨지면 즉시 중단 (투명 지구 방지)
+        if (!UvLockIntact(workingCrust))
+        {
+            Debug.LogError("[EarthCraterDeform] UV lock broken — dig aborted.");
+            return 0;
+        }
+
         Vector3 local = transform.InverseTransformPoint(worldPoint);
         if (local.sqrMagnitude < 1e-8f)
             return 0;
@@ -99,20 +123,37 @@ public class EarthCraterDeform : MonoBehaviour
         site.hits++;
         site.dir = Vector3.Slerp(site.dir, dir, 0.35f).normalized;
 
-        float hitMul = 1f + (site.hits - 1) * (huge ? 0.55f : 0.45f);
-        float depth = Mathf.Clamp(depthNorm * hitMul, 0.03f, maxDigDepth);
-        float radius = Mathf.Clamp(radiusNorm * (1f + (site.hits - 1) * 0.06f), 0.05f, 0.35f);
-        float rimH = depth * 0.4f;
+        float hitMul = 1f + (site.hits - 1) * (huge ? 0.4f : 0.32f);
+        float depth = Mathf.Clamp(depthNorm * hitMul, 0.02f, maxDigDepth);
+        float radius = Mathf.Clamp(radiusNorm * (1f + (site.hits - 1) * 0.05f), 0.05f, 0.28f);
+        float rimH = depth * 0.35f;
 
         if (seed == 0)
             seed = HashDir(site.dir) ^ (site.hits * 7919);
 
-        DeformMeshIrregular(workingCrust, site.dir, radius, depth, rimH, seed, minShellRadius);
-        if (workingOcean != null)
-            DeformMeshIrregular(workingOcean, site.dir, radius * 1.02f, depth * 1.02f, rimH * 0.35f, seed ^ 0x5f3759df, minShellRadius);
+        // crust만 변형. Ocean/Clouds는 건드리지 않음 (레이어·투명 이슈 방지).
+        DeformVerticesOnly(workingCrust, site.dir, radius, depth, rimH, seed, minShellRadius);
+
+        if (!UvLockIntact(workingCrust))
+        {
+            Debug.LogError("[EarthCraterDeform] Dig corrupted UVs — further dig disabled.");
+            ready = false;
+            workingCrust = null;
+            return 0;
+        }
 
         RefreshCollider();
         return site.hits;
+    }
+
+    bool UvLockIntact(Mesh mesh)
+    {
+        if (mesh == null)
+            return false;
+        if (mesh.vertexCount != lockedVertexCount)
+            return false;
+        var uv = mesh.uv;
+        return uv != null && uv.Length == lockedUvCount && uv.Length == mesh.vertexCount;
     }
 
     DigSite FindOrCreateSite(Vector3 dir)
@@ -157,9 +198,14 @@ public class EarthCraterDeform : MonoBehaviour
         }
     }
 
-    static void DeformMeshIrregular(
+    /// <summary>vertices만 이동. uv/triangles/normals 레이아웃 교체 금지.</summary>
+    static void DeformVerticesOnly(
         Mesh mesh, Vector3 impactDir, float craterAngle, float depthFrac, float rimFrac, int seed, float minRadius)
     {
+        // UV 스냅샷 — 변형 후 반드시 복원 (실수로 깨지는 것 방지)
+        Vector2[] uvLock = mesh.uv;
+        int[] triLock = mesh.triangles;
+
         var rng = new System.Random(seed);
         float stretchA = Mathf.Lerp(0.75f, 1.25f, (float)rng.NextDouble());
         float stretchB = Mathf.Lerp(0.78f, 1.22f, (float)rng.NextDouble());
@@ -182,7 +228,7 @@ public class EarthCraterDeform : MonoBehaviour
 
         var verts = mesh.vertices;
         bool changed = false;
-        float craterRad = Mathf.Clamp(craterAngle, 0.05f, 0.45f);
+        float craterRad = Mathf.Clamp(craterAngle, 0.05f, 0.4f);
 
         for (int i = 0; i < verts.Length; i++)
         {
@@ -239,6 +285,9 @@ public class EarthCraterDeform : MonoBehaviour
             return;
 
         mesh.vertices = verts;
+        // UV/triangles 강제 유지 — 투명 지구 방지의 핵심
+        mesh.uv = uvLock;
+        mesh.triangles = triLock;
         mesh.RecalculateNormals();
         mesh.RecalculateBounds();
         mesh.RecalculateTangents();

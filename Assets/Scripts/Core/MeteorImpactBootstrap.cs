@@ -191,8 +191,8 @@ public class MeteorImpactBootstrap : MonoBehaviour
         planet.SetVisualRefs(rend, core.transform);
         earthGo.AddComponent<EarthSpin>().SetSpeed(7.5f);
 
-        // 메시 UV는 Unity 기본 유지 (시작 시 교체하면 텍스처가 깨짐)
-        // 크레이터 변형은 충돌 시에만 기존 메시를 복제해서 사용
+        // HARD RULE: Unity Sphere 메시/UV 절대 리메시 금지 (교체 시 지구 전체가 투명·깨짐)
+        // 크레이터는 EarthCraterDeform이 기존 메시 복제 후 vertices만 이동
 
         var body = earthGo.AddComponent<EarthBodyData>();
 
