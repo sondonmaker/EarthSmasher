@@ -16,7 +16,7 @@ public class EarthLayerController : MonoBehaviour
     [SerializeField] bool showMagneticPoles = true;
 
     [Header("State")]
-    public bool oceanEnabled = true;
+    public bool oceanEnabled = false;
     public bool cloudsEnabled = true;
     public bool atmosphereEnabled = true;
     public bool auroraEnabled = true;
@@ -24,7 +24,7 @@ public class EarthLayerController : MonoBehaviour
 
     [Range(0f, 1f)] public float oceanStrength = 0.95f;
     [Range(0f, 1f)] public float cloudsStrength = 0.9f;
-    [Range(0f, 1f)] public float atmosphereStrength = 0.55f;
+    [Range(0f, 1f)] public float atmosphereStrength = 0.4f;
     [Range(0f, 1f)] public float auroraStrength = 0.85f;
     [Range(0f, 2f)] public float nightLightsStrength = 0.85f;
 

@@ -159,18 +159,17 @@ public class MeteorImpactBootstrap : MonoBehaviour
         core.GetComponent<Renderer>().material = EarthTextureLoader.CreateCoreMaterial();
         core.SetActive(false);
 
+        // 바다는 지각 셰이더에 불투명으로 구움 — 반투명 Ocean 스피어는 끔 (see-through 원인)
         var ocean = CreateLayerSphere("Ocean", earthGo.transform, 1.006f, EarthTextureLoader.CreateOceanMaterial(), false);
+        ocean.SetActive(false);
 
         var clouds = CreateLayerSphere("Clouds", earthGo.transform, 1.028f, EarthTextureLoader.CreateCloudMaterial(), true);
         clouds.AddComponent<EarthSpin>().SetSpeed(3.2f);
-        // 구름 그림자 — 표면 위에 살짝 떠서 같이 회전
-        var cloudShadowMat = EarthTextureLoader.CreateCloudShadowMaterial();
-        if (cloudShadowMat != null)
-            CreateLayerSphere("CloudShadow", clouds.transform, 0.988f, cloudShadowMat, false);
+        // CloudShadow(Multiply) 제거 — 표면이 흐려 보이던 원인
 
-        // 대기 림라이트 (안쪽 선명 + 바깥 헤일로)
-        var atmosphere = CreateLayerSphere("Atmosphere", earthGo.transform, 1.055f, EarthTextureLoader.CreateAtmosphereMaterial(), false);
-        var halo = CreateLayerSphere("AtmosphereHalo", atmosphere.transform, 1.038f, EarthTextureLoader.CreateAtmosphereHaloMaterial(), false);
+        // 대기 림라이트 (얇게만)
+        var atmosphere = CreateLayerSphere("Atmosphere", earthGo.transform, 1.045f, EarthTextureLoader.CreateAtmosphereMaterial(), false);
+        var halo = CreateLayerSphere("AtmosphereHalo", atmosphere.transform, 1.03f, EarthTextureLoader.CreateAtmosphereHaloMaterial(), false);
 
         var aurora = CreateLayerSphere("Aurora", earthGo.transform, 1.04f, EarthTextureLoader.CreateAuroraMaterial(), false);
 
