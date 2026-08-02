@@ -2,14 +2,14 @@ Shader "EarthSmasher/CloudsSoft"
 {
     Properties
     {
-        _MainTex ("Cloud Map", 2D) = "white" {}
+        _MainTex ("Cloud Map (RGB + Alpha)", 2D) = "white" {}
         _Color ("Tint", Color) = (1,1,1,1)
-        _Opacity ("Opacity", Range(0, 2)) = 0.78
-        _Softness ("Softness", Range(0.2, 4)) = 0.95
-        _Threshold ("Coverage Threshold", Range(0, 0.6)) = 0.22
-        _Contrast ("Contrast", Range(0.5, 3)) = 1.55
-        _LightWrap ("Light Wrap", Range(0, 1)) = 0.38
-        _Volume ("Volume Shade", Range(0, 1)) = 0.45
+        _Opacity ("Opacity", Range(0, 2)) = 0.85
+        _AlphaBoost ("Alpha Boost", Range(0.2, 3)) = 1.15
+        _AlphaGamma ("Alpha Gamma", Range(0.4, 2.5)) = 1.35
+        _CoverageCut ("Coverage Cut", Range(0, 0.5)) = 0.08
+        _LightWrap ("Light Wrap", Range(0, 1)) = 0.35
+        _Volume ("Volume Shade", Range(0, 1)) = 0.35
     }
 
     SubShader
@@ -39,9 +39,9 @@ Shader "EarthSmasher/CloudsSoft"
             float4 _MainTex_ST;
             float4 _Color;
             float _Opacity;
-            float _Softness;
-            float _Threshold;
-            float _Contrast;
+            float _AlphaBoost;
+            float _AlphaGamma;
+            float _CoverageCut;
             float _LightWrap;
             float _Volume;
 
@@ -71,29 +71,30 @@ Shader "EarthSmasher/CloudsSoft"
             fixed4 frag(v2f i) : SV_Target
             {
                 float4 tex = tex2D(_MainTex, i.uv);
-                float raw = max(tex.r, max(tex.g, tex.b));
+                // 알파 맵 우선, 없으면 휘도 폴백
+                float aSrc = tex.a;
+                float lum = max(tex.r, max(tex.g, tex.b));
+                // 알파 맵이면 알파, JPG 폴백이면 휘도
+                float density = (aSrc < 0.995 && aSrc > 0.001) ? aSrc : lum;
 
-                // 얇은 실타래는 남기고, 중간 회색 씻김만 줄여 소용돌이 형태 유지
-                float density = saturate((raw - _Threshold) / max(1e-3, 1.0 - _Threshold));
-                density = saturate(pow(density, _Softness));
-                density = saturate(pow(density, 1.0 / max(0.2, _Contrast)));
+                density = saturate((density - _CoverageCut) / max(1e-3, 1.0 - _CoverageCut));
+                density = saturate(pow(density * _AlphaBoost, _AlphaGamma));
 
-                // 덩어리(코어)는 드물게, 얇은 띠 위주
-                float core = saturate(smoothstep(0.55, 0.92, density));
-                float veil = saturate(pow(density, 1.25));
+                // 두꺼운 곳만 밝고, 얇은 띠는 반투명
+                float thick = saturate(smoothstep(0.35, 0.9, density));
 
                 float3 n = normalize(i.worldNormal);
                 float3 lightDir = normalize(_WorldSpaceLightPos0.xyz);
                 float ndotl = saturate(dot(n, lightDir) * (1.0 - _LightWrap) + _LightWrap);
 
-                float shade = lerp(1.0 - _Volume * 0.4, 1.0, ndotl);
-                float3 bright = _Color.rgb;
-                float3 soft = _Color.rgb * float3(0.82, 0.86, 0.92);
-                float3 dayCol = lerp(soft, bright, core) * shade;
-                float3 nightCol = _Color.rgb * float3(0.35, 0.4, 0.5);
+                float shade = lerp(1.0 - _Volume * 0.45, 1.0, ndotl);
+                float3 dayCol = _Color.rgb * lerp(float3(0.86, 0.89, 0.94), float3(1,1,1), thick) * shade;
+                float3 nightCol = _Color.rgb * float3(0.32, 0.38, 0.48);
                 float3 col = lerp(nightCol, dayCol, ndotl);
 
-                float alpha = saturate((veil * 0.4 + core * 0.75) * _Opacity * _Color.a);
+                float alpha = saturate(density * _Opacity * _Color.a);
+                // 아주 옅은 픽셀은 버려 덩어리감 감소
+                alpha *= step(0.02, alpha);
                 return float4(col, alpha);
             }
             ENDCG

@@ -59,7 +59,8 @@ Shader "EarthSmasher/CloudShadow"
 
             fixed4 frag(v2f i) : SV_Target
             {
-                float raw = tex2D(_MainTex, i.uv).r;
+                float4 tex = tex2D(_MainTex, i.uv);
+                float raw = (tex.a < 0.995 && tex.a > 0.001) ? tex.a : tex.r;
                 float d = saturate((raw - _Threshold) / max(1e-3, 1.0 - _Threshold));
                 d = saturate(pow(d, _Softness));
                 float shade = 1.0 - d * _Strength;

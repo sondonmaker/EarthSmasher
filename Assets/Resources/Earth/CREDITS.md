@@ -5,7 +5,8 @@
 | `earth_day.jpg` | NASA Blue Marble style (webgl-earth) |
 | `earth_night.jpg` | Solar System Scope / city lights |
 | `earth_clouds.jpg` | Solar System Scope (fallback) |
-| `earth_clouds_4k.png` | [webgl-earth fair_clouds_4k](https://github.com/turban/webgl-earth) |
+| `earth_clouds_4k.png` | [webgl-earth fair_clouds_4k](https://github.com/turban/webgl-earth) (legacy) |
+| `earth_clouds_alpha.png` | [Live Cloud Maps](https://github.com/matteason/live-cloud-maps) alpha PNG (NASA/NOAA-based), 4096×2048 |
 | `earth_water.png` | three-globe water mask (ocean vs land) |
 | `earth_topology.png` | three-globe topology |
 

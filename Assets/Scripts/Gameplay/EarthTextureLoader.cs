@@ -11,6 +11,10 @@ public static class EarthTextureLoader
     {
         get
         {
+            // 알파 채널이 있는 실제 구름 맵 우선 (덩어리 JPG보다 훨씬 자연스러움)
+            var alpha = Load("Earth/earth_clouds_alpha");
+            if (alpha != null)
+                return alpha;
             var hi = Load("Earth/earth_clouds_4k");
             return hi != null ? hi : Load("Earth/earth_clouds");
         }
@@ -61,9 +65,27 @@ public static class EarthTextureLoader
 
     public static Material CreateCloudMaterial()
     {
-        // 덩어리 커버리지↓ — 진한 부분만 남기고 중간 회색 구름은 컷
-        return BuildCloudMaterial(0.58f, 1.35f, 0.42f, 1.85f, Vector2.zero, Vector2.one,
-            new Color(0.97f, 0.98f, 1f, 1f));
+        var shader = Shader.Find("EarthSmasher/CloudsSoft");
+        if (shader == null)
+        {
+            var fallback = new Material(Shader.Find("Standard"));
+            fallback.mainTexture = Clouds;
+            fallback.color = new Color(0.98f, 0.99f, 1f, 0.45f);
+            SetTransparent(fallback);
+            return fallback;
+        }
+
+        var mat = new Material(shader);
+        mat.mainTexture = Clouds;
+        mat.color = new Color(0.98f, 0.99f, 1f, 1f);
+        // 알파 맵 기준: 양 적당 + 얇은 띠 유지
+        mat.SetFloat("_Opacity", 0.72f);
+        mat.SetFloat("_AlphaBoost", 1.05f);
+        mat.SetFloat("_AlphaGamma", 1.45f); // >1 → 옅은 구름 더 줄임
+        mat.SetFloat("_CoverageCut", 0.12f);
+        mat.SetFloat("_LightWrap", 0.35f);
+        mat.SetFloat("_Volume", 0.32f);
+        return mat;
     }
 
     /// <summary>구름 아래 부드러운 그림자 — 표면 깊이감.</summary>
@@ -75,44 +97,14 @@ public static class EarthTextureLoader
 
         var mat = new Material(shader);
         mat.mainTexture = Clouds;
-        mat.SetFloat("_Strength", 0.28f);
-        mat.SetFloat("_Threshold", 0.4f);
-        mat.SetFloat("_Softness", 1.35f);
+        mat.SetFloat("_Strength", 0.32f);
+        mat.SetFloat("_Threshold", 0.18f);
+        mat.SetFloat("_Softness", 1.4f);
         return mat;
     }
 
     /// <summary>보조 구름층 (옵션).</summary>
-    public static Material CreateCloudDetailMaterial()
-    {
-        return BuildCloudMaterial(0.22f, 1.05f, 0.32f, 1.35f, new Vector2(0.17f, 0.08f), new Vector2(1.35f, 1.35f),
-            new Color(0.94f, 0.96f, 0.99f, 1f));
-    }
-
-    static Material BuildCloudMaterial(float opacity, float softness, float threshold, float contrast, Vector2 offset, Vector2 tiling, Color tint)
-    {
-        var shader = Shader.Find("EarthSmasher/CloudsSoft");
-        if (shader == null)
-        {
-            var fallback = new Material(Shader.Find("Standard"));
-            fallback.mainTexture = Clouds;
-            fallback.color = new Color(tint.r, tint.g, tint.b, Mathf.Clamp01(opacity * 0.45f));
-            SetTransparent(fallback);
-            return fallback;
-        }
-
-        var mat = new Material(shader);
-        mat.mainTexture = Clouds;
-        mat.color = tint;
-        mat.SetFloat("_Opacity", opacity);
-        mat.SetFloat("_Softness", softness);
-        mat.SetFloat("_Threshold", threshold);
-        mat.SetFloat("_Contrast", contrast);
-        mat.SetFloat("_LightWrap", 0.38f);
-        mat.SetFloat("_Volume", 0.45f);
-        mat.mainTextureOffset = offset;
-        mat.mainTextureScale = tiling;
-        return mat;
-    }
+    public static Material CreateCloudDetailMaterial() => CreateCloudMaterial();
 
     public static Material CreateCoreMaterial()
     {
