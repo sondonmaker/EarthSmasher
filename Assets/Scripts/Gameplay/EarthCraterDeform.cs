@@ -76,13 +76,14 @@ public class EarthCraterDeform : MonoBehaviour
             return;
 
         Vector3 dir = local.normalized;
-        // 얕은 눌림만 — 깊게 파면 속이 비고 플라스틱 공처럼 보임
-        float craterAngle = Mathf.Clamp(radiusNorm * 0.95f, 0.05f, 0.45f);
-        float depth = Mathf.Clamp(depthNorm, 0.008f, 0.045f);
-        float rimH = depth * 0.9f;
+        float craterAngle = Mathf.Clamp(radiusNorm * 1.0f, 0.06f, 0.5f);
+        float depth = Mathf.Clamp(depthNorm, 0.02f, 0.12f);
+        float rimH = depth * 0.55f;
 
         DeformMesh(workingCrust, dir, craterAngle, depth, rimH);
-        // Ocean/Cloud는 변형하지 않음 (파란 속살·구멍 노출 방지)
+        // 바다도 같이 눌러 파란 속살이 안 보이게 + 용암 캡이 보이게
+        if (workingOcean != null)
+            DeformMesh(workingOcean, dir, craterAngle * 1.02f, depth * 1.05f, rimH * 0.4f);
     }
 
     static void DeformMesh(Mesh mesh, Vector3 impactDir, float craterAngle, float depthFrac, float rimFrac)

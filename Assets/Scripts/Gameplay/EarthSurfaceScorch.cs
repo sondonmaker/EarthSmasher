@@ -325,34 +325,26 @@ public class EarthSurfaceScorch : MonoBehaviour
 
                 // 중심=어두운 암석+약한 용암, 링=용암, 바깥=재
                 Color32 target;
-                if (dist < 0.42f)
+                // 맞은 면 전체 = 붉은 용암 텍스처 (스크린샷 느낌)
+                var hot = new Color32(
+                    (byte)Mathf.Min(255, (lava.r * 2 + emit.r) / 2),
+                    (byte)Mathf.Min(255, (lava.g + emit.g / 2) / 2),
+                    (byte)Mathf.Min(255, lava.b / 3 + 8),
+                    255);
+                if (dist < 0.75f)
                 {
-                    float t = dist / 0.42f;
-                    byte er = (byte)Mathf.Min(255, rock.r / 3 + emit.r / 5);
-                    byte eg = (byte)Mathf.Min(255, rock.g / 4 + emit.g / 8);
-                    byte eb = (byte)Mathf.Min(255, rock.b / 5);
-                    var dark = new Color32(er, eg, eb, 255);
-                    target = Color32.Lerp(dark, rock, t * 0.35f);
-                }
-                else if (dist < 0.78f)
-                {
-                    float rim = 1f - Mathf.Abs(dist - 0.6f) / 0.2f;
-                    rim = Mathf.Clamp01(rim);
-                    // emission으로 용암 링 — 선이 아니라 텍스처 덩어리
-                    var hot = new Color32(
-                        (byte)Mathf.Min(255, (lava.r * 2 + emit.r) / 3),
-                        (byte)Mathf.Min(255, (lava.g + emit.g) / 2),
-                        (byte)Mathf.Min(255, lava.b / 2),
+                    float t = dist / 0.75f;
+                    // 중심이 더 밝고 가장자리로 갈수록 약간 어두워짐
+                    var core = new Color32(
+                        (byte)Mathf.Min(255, hot.r + 40),
+                        (byte)Mathf.Min(255, hot.g + 10),
+                        hot.b,
                         255);
-                    target = Color32.Lerp(rock, hot, rim * 0.85f);
+                    target = Color32.Lerp(core, hot, t);
                 }
                 else
                 {
-                    target = new Color32(
-                        (byte)(rock.r * 0.45f),
-                        (byte)(rock.g * 0.4f),
-                        (byte)(rock.b * 0.38f),
-                        255);
+                    target = Color32.Lerp(hot, rock, (dist - 0.75f) / 0.65f);
                 }
 
                 int idx = y * w + x;
