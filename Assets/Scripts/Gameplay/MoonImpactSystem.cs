@@ -81,20 +81,31 @@ public class MoonImpactSystem : MonoBehaviour
             : localDir;
         center = earth != null ? earth.transform.position : Vector3.zero;
 
-        // 시네마틱: 달이 지구로 향하는 3/4 구도 (드래그하면 언제든 해제)
-        var orbitCam = Object.FindObjectOfType<OrbitCamera>();
-        if (orbitCam != null)
-            orbitCam.FrameApproachShot(worldDir, R, 0.65f);
-
-        yield return WaitSim(0.55f);
-
         CleanupLeftoverFx();
-        moonGo = SpawnMoon(R);
+        var orbitCam = Object.FindObjectOfType<OrbitCamera>();
 
-        if (mode == MoonImpactMode.Orbit)
-            yield return RunOrbit(moonGo, center, worldDir, R, report);
-        else
+        if (mode == MoonImpactMode.Crash)
+        {
+            // Crash: 달 즉시 등장 + 카메라가 달을 추적
+            moonGo = SpawnMoon(R);
+            if (orbitCam != null && moonGo != null && earth != null)
+                orbitCam.BeginChase(moonGo.transform, earth.transform, R * 2.4f, 0.32f);
+
             yield return RunCrash(moonGo, center, worldDir, R, report);
+
+            if (orbitCam != null)
+                orbitCam.EndChase(true);
+        }
+        else
+        {
+            // Orbit: 시네마틱 구도 후 플라이바이
+            if (orbitCam != null)
+                orbitCam.FrameApproachShot(worldDir, R, 0.65f);
+            yield return WaitSim(0.55f);
+
+            moonGo = SpawnMoon(R);
+            yield return RunOrbit(moonGo, center, worldDir, R, report);
+        }
 
         DestroyMoon();
 
@@ -182,7 +193,10 @@ public class MoonImpactSystem : MonoBehaviour
         }
 
         moon.transform.position = impact;
-        // 달은 충돌과 함께 소멸 — 파편 메시를 땅에 박아두지 않음
+        // 달은 충돌과 함께 소멸 — 추적 해제 후 파편 없이 제거
+        var orbitCam = Object.FindObjectOfType<OrbitCamera>();
+        if (orbitCam != null)
+            orbitCam.EndChase(true);
         DestroyMoon();
 
         CameraShake.Shake(2.8f, 1.45f);

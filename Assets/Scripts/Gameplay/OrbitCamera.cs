@@ -34,12 +34,61 @@ public class OrbitCamera : MonoBehaviour
     float _fromPitch;
     float _fromDistance;
 
+    bool _chasing;
+    Transform _chaseSubject;
+    Transform _chaseLookAt;
+    float _chaseDistance;
+    float _chaseSide;
+
     public float Distance => distance;
     public float MinDistance => minDistance;
     public float MaxDistance => maxDistance;
     public bool IsDragging => _dragging;
+    public bool IsChasing => _chasing;
 
     public void SetTarget(Transform t) => target = t;
+
+    /// <summary>
+    /// 대상(달) 뒤를 따라가며 lookAt(지구) 쪽을 본다. 드래그하면 해제.
+    /// </summary>
+    public void BeginChase(Transform subject, Transform lookAt, float distanceBehind, float sideBias = 0.35f)
+    {
+        if (subject == null)
+            return;
+        _chasing = true;
+        _focusing = false;
+        _dragging = false;
+        _chaseSubject = subject;
+        _chaseLookAt = lookAt;
+        _chaseDistance = Mathf.Max(0.5f, distanceBehind);
+        _chaseSide = sideBias;
+    }
+
+    public void EndChase(bool resyncOrbit = true)
+    {
+        if (!_chasing)
+            return;
+        _chasing = false;
+        _chaseSubject = null;
+        _chaseLookAt = null;
+        if (resyncOrbit)
+            ResyncOrbitFromPose();
+    }
+
+    void ResyncOrbitFromPose()
+    {
+        if (target == null)
+            return;
+        Vector3 toCam = transform.position - target.position;
+        float d = toCam.magnitude;
+        if (d < 1e-4f)
+            return;
+        toCam /= d;
+        distance = Mathf.Clamp(d, minDistance, maxDistance);
+        yaw = Mathf.Atan2(toCam.x, toCam.z) * Mathf.Rad2Deg;
+        pitch = Mathf.Asin(Mathf.Clamp(toCam.y, -1f, 1f)) * Mathf.Rad2Deg;
+        pitch = Mathf.Clamp(pitch, minPitch, maxPitch);
+    }
 
     /// <summary>
     /// 지구 표면 방향(월드)이 화면 중앙에 오도록 궤도를 돌린다.
@@ -145,16 +194,30 @@ public class OrbitCamera : MonoBehaviour
 
     void LateUpdate()
     {
-        if (target == null) return;
+        if (target == null && !_chasing) return;
 
         // 사이드/HUD/줌 UI 위에 있을 때만 막음. 재해 연출·리포트 열려 있어도 카메라 자유.
         bool uiBlocks = EarthLayerToolbar.BlocksGameplayInput
             || ZoomUiBlocker.BlocksGameplay
             || WorldStatusHud.BlocksGameplay;
 
-        // 드래그/줌이면 자동 포커스 즉시 끊고 같은 프레임에 조작
-        if (_focusing && !uiBlocks && WantsOrbitInterrupt())
-            _focusing = false;
+        // 드래그/줌이면 자동 포커스·추적 즉시 끊고 같은 프레임에 조작
+        if (!uiBlocks && WantsOrbitInterrupt())
+        {
+            if (_focusing)
+                _focusing = false;
+            if (_chasing)
+                EndChase(true);
+        }
+
+        if (_chasing && _chaseSubject != null)
+        {
+            ApplyChaseTransform();
+            HandleZoom();
+            return;
+        }
+
+        if (target == null) return;
 
         if (_focusing)
         {
@@ -172,6 +235,29 @@ public class OrbitCamera : MonoBehaviour
             HandleOrbit();
 
         ApplyTransform();
+    }
+
+    void ApplyChaseTransform()
+    {
+        Vector3 subject = _chaseSubject.position;
+        Vector3 lookPt = _chaseLookAt != null ? _chaseLookAt.position : subject;
+        Vector3 toLook = lookPt - subject;
+        if (toLook.sqrMagnitude < 1e-6f)
+            toLook = -transform.forward;
+        toLook.Normalize();
+
+        Vector3 side = Vector3.Cross(toLook, Vector3.up);
+        if (side.sqrMagnitude < 1e-4f)
+            side = Vector3.Cross(toLook, Vector3.right);
+        side.Normalize();
+        Vector3 up = Vector3.Cross(side, toLook).normalized;
+
+        // 달 뒤·옆에서 지구 방향 — 달이 항상 프레임에 들어오게
+        transform.position = subject
+            - toLook * _chaseDistance
+            + side * (_chaseDistance * _chaseSide)
+            + up * (_chaseDistance * 0.18f);
+        transform.LookAt(Vector3.Lerp(subject, lookPt, 0.42f), up);
     }
 
     void HandleZoom()
