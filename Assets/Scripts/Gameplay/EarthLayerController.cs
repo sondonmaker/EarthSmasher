@@ -23,7 +23,7 @@ public class EarthLayerController : MonoBehaviour
     public bool nightLightsEnabled = true;
 
     [Range(0f, 1f)] public float oceanStrength = 0.65f;
-    [Range(0f, 1f)] public float cloudsStrength = 0.88f;
+    [Range(0f, 1f)] public float cloudsStrength = 0.58f;
     [Range(0f, 1f)] public float atmosphereStrength = 0.45f;
     [Range(0f, 1f)] public float auroraStrength = 0.85f;
     [Range(0f, 2f)] public float nightLightsStrength = 0.85f;
@@ -120,7 +120,17 @@ public class EarthLayerController : MonoBehaviour
             SetLayerAlpha(_oceanRend, oceanStrength * 0.75f, false);
 
         if (_cloudsRend != null)
-            SetLayerAlpha(_cloudsRend, cloudsStrength * 0.7f, false);
+        {
+            // 메인 + 서브 구름층 모두 같은 강도로 (자식 CloudsHigh 포함)
+            float cloudA = cloudsStrength * 0.55f;
+            SetLayerAlpha(_cloudsRend, cloudA, false);
+            var childRends = clouds.GetComponentsInChildren<Renderer>(true);
+            for (int i = 0; i < childRends.Length; i++)
+            {
+                if (childRends[i] != _cloudsRend)
+                    SetLayerAlpha(childRends[i], cloudA * 0.65f, false);
+            }
+        }
 
         if (_atmosphereRend != null)
             SetLayerAlpha(_atmosphereRend, atmosphereStrength * 0.35f, false);

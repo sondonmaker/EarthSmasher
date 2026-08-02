@@ -4,11 +4,11 @@ Shader "EarthSmasher/CloudsSoft"
     {
         _MainTex ("Cloud Map", 2D) = "white" {}
         _Color ("Tint", Color) = (1,1,1,1)
-        _Opacity ("Opacity", Range(0, 2)) = 1.25
-        _Softness ("Softness", Range(0.2, 4)) = 0.85
-        _Threshold ("Coverage Threshold", Range(0, 0.6)) = 0.12
-        _Contrast ("Contrast", Range(0.5, 3)) = 1.45
-        _LightWrap ("Light Wrap", Range(0, 1)) = 0.45
+        _Opacity ("Opacity", Range(0, 2)) = 0.75
+        _Softness ("Softness", Range(0.2, 4)) = 1.2
+        _Threshold ("Coverage Threshold", Range(0, 0.6)) = 0.22
+        _Contrast ("Contrast", Range(0.5, 3)) = 1.12
+        _LightWrap ("Light Wrap", Range(0, 1)) = 0.42
     }
 
     SubShader
@@ -71,20 +71,22 @@ Shader "EarthSmasher/CloudsSoft"
                 float4 tex = tex2D(_MainTex, i.uv);
                 float density = max(tex.r, max(tex.g, tex.b));
 
-                // 얇은 구름도 살리고 두꺼운 부분은 더 하얗게
+                // 두꺼운 부분만 살리고 얇은 띠는 반투명 — 순백 칠하기 방지
                 density = saturate((density - _Threshold) / max(1e-3, 1.0 - _Threshold));
                 density = saturate(pow(density, _Softness));
                 density = saturate(pow(density, 1.0 / max(0.2, _Contrast)));
+                // 두꺼운 코어만 밝고, 가장자리는 더 투명
+                float core = saturate(smoothstep(0.25, 0.95, density));
 
                 float3 n = normalize(i.worldNormal);
                 float3 lightDir = normalize(_WorldSpaceLightPos0.xyz);
                 float ndotl = saturate(dot(n, lightDir) * (1.0 - _LightWrap) + _LightWrap);
 
-                // 낮 쪽은 밝은 흰 구름, 밤 쪽은 살짝 푸른 회색
-                float3 dayCol = _Color.rgb;
-                float3 nightCol = _Color.rgb * float3(0.55, 0.62, 0.75);
+                // 회백 + 살짝 푸른 톤 (순백 과다 방지)
+                float3 dayCol = _Color.rgb * lerp(float3(0.82, 0.86, 0.92), float3(1.0, 1.0, 1.0), core);
+                float3 nightCol = _Color.rgb * float3(0.42, 0.48, 0.58);
                 float3 col = lerp(nightCol, dayCol, ndotl);
-                float alpha = saturate(density * _Opacity * _Color.a);
+                float alpha = saturate(density * _Opacity * _Color.a * lerp(0.55, 1.0, core));
                 return float4(col, alpha);
             }
             ENDCG
