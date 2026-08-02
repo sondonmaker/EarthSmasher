@@ -55,6 +55,25 @@ public class MeteorLauncher : MonoBehaviour
             Fire(hit.point, hit.normal);
     }
 
+    /// <summary>UI 버튼용: 카메라 쪽 지구 표면에 소행성(좌클릭과 동일)을 떨어뜨린다.</summary>
+    public void FireTowardCamera()
+    {
+        if (earth == null)
+            earth = FindObjectOfType<EarthPlanet>();
+        if (earth == null || Time.time < _readyAt)
+            return;
+        if (cam == null)
+            cam = Camera.main;
+        if (cam == null)
+            return;
+
+        Vector3 dir = (cam.transform.position - earth.transform.position).normalized;
+        if (dir.sqrMagnitude < 1e-6f)
+            dir = Random.onUnitSphere;
+        Vector3 point = earth.transform.position + dir * earth.Radius;
+        Fire(point, dir);
+    }
+
     void Fire(Vector3 point, Vector3 normal)
     {
         MeteorProjectile meteor;

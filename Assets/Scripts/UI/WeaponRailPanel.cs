@@ -96,7 +96,8 @@ public class WeaponRailPanel : MonoBehaviour
                 tip = "Impact",
                 subs = new[]
                 {
-                    SubOf("meteor", "*", "Meteor", FireBigMeteor, () => false),
+                    SubOf("asteroid", "*", "Asteroid", FireSmallAsteroid, () => false),
+                    SubOf("big_meteor", "#", "Big Meteor", FireBigMeteor, () => false),
                     SubOf("moon_orbit", "o", "Moon Orbit", () => FireMoon(MoonImpactMode.Orbit), MoonBusy),
                     SubOf("moon_crash", "O", "Moon Crash", () => FireMoon(MoonImpactMode.Crash), MoonBusy)
                 }
@@ -359,6 +360,15 @@ public class WeaponRailPanel : MonoBehaviour
         EarthquakeConfirmUI.Ensure().Open(7.5f);
     }
 
+    /// <summary>좌클릭과 동일 — 소행성</summary>
+    static void FireSmallAsteroid()
+    {
+        var launcher = UnityEngine.Object.FindObjectOfType<MeteorLauncher>();
+        if (launcher != null)
+            launcher.FireTowardCamera();
+    }
+
+    /// <summary>우클릭/Space와 동일 — 큰 운석</summary>
     static void FireBigMeteor()
     {
         var big = UnityEngine.Object.FindObjectOfType<BigMeteorStrike>();
