@@ -51,16 +51,16 @@ public static class EarthTextureLoader
 
     public static Material CreateCloudMaterial()
     {
-        // 커버리지는 유지하되 순백 과다 방지 — 얇은 층 + 살짝 회백
-        return BuildCloudMaterial(0.72f, 1.2f, 0.22f, 1.12f, Vector2.zero, Vector2.one,
-            new Color(0.92f, 0.94f, 0.97f, 1f));
+        // 얇은 구름은 잘라내고(커버리지↓), 남은 덩어리는 선명하게
+        return BuildCloudMaterial(0.9f, 0.72f, 0.4f, 1.7f, Vector2.zero, Vector2.one,
+            new Color(0.96f, 0.97f, 0.99f, 1f));
     }
 
-    /// <summary>두 번째 구름층 — UV 오프셋으로 깊이만 보강 (약하게).</summary>
+    /// <summary>보조 구름층 (현재 미사용 — 메인만으로 커버리지 조절).</summary>
     public static Material CreateCloudDetailMaterial()
     {
-        return BuildCloudMaterial(0.28f, 1.35f, 0.3f, 1.05f, new Vector2(0.17f, 0.08f), new Vector2(1.35f, 1.35f),
-            new Color(0.9f, 0.92f, 0.96f, 1f));
+        return BuildCloudMaterial(0.2f, 0.9f, 0.45f, 1.4f, new Vector2(0.17f, 0.08f), new Vector2(1.35f, 1.35f),
+            new Color(0.92f, 0.94f, 0.97f, 1f));
     }
 
     static Material BuildCloudMaterial(float opacity, float softness, float threshold, float contrast, Vector2 offset, Vector2 tiling, Color tint)
