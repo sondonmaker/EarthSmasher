@@ -35,12 +35,12 @@ public static class EarthTextureLoader
                 mat.mainTexture = day;
             if (night != null)
                 mat.SetTexture("_NightTex", night);
-            mat.color = new Color(0.82f, 0.86f, 0.9f, 1f);
-            mat.SetFloat("_Exposure", 0.72f);
-            mat.SetFloat("_Contrast", 1.28f);
+            mat.color = new Color(0.9f, 0.92f, 0.94f, 1f);
+            mat.SetFloat("_Exposure", 0.88f);
+            mat.SetFloat("_Contrast", 1.18f);
             mat.SetFloat("_Terminator", 0.26f);
             mat.SetFloat("_NightIntensity", 1.05f);
-            mat.SetFloat("_AmbientFloor", 0.018f);
+            mat.SetFloat("_AmbientFloor", 0.035f);
             return mat;
         }
 
@@ -97,7 +97,7 @@ public static class EarthTextureLoader
 
         var mat = new Material(shader);
         mat.mainTexture = Clouds;
-        mat.SetFloat("_Strength", 0.32f);
+        mat.SetFloat("_Strength", 0.22f);
         mat.SetFloat("_Threshold", 0.18f);
         mat.SetFloat("_Softness", 1.4f);
         return mat;
@@ -125,12 +125,12 @@ public static class EarthTextureLoader
         {
             var mat = new Material(shader);
             mat.mainTexture = water;
-            // 레퍼런스: 거의 검정에 가까운 심해 — 흰 구름 대비
-            mat.SetColor("_DeepColor", new Color(0.004f, 0.02f, 0.08f, 0.72f));
-            mat.SetColor("_ShallowColor", new Color(0.04f, 0.35f, 0.48f, 0.45f));
-            mat.SetFloat("_Gloss", 0.96f);
-            mat.SetFloat("_FresnelPower", 3.4f);
-            mat.SetFloat("_SpecIntensity", 1.35f);
+            // 불투명에 가깝게 — 지표면이 비치지 않게
+            mat.SetColor("_DeepColor", new Color(0.008f, 0.04f, 0.12f, 0.96f));
+            mat.SetColor("_ShallowColor", new Color(0.05f, 0.32f, 0.42f, 0.88f));
+            mat.SetFloat("_Gloss", 0.92f);
+            mat.SetFloat("_FresnelPower", 3.6f);
+            mat.SetFloat("_SpecIntensity", 1.15f);
             return mat;
         }
 
@@ -157,9 +157,9 @@ public static class EarthTextureLoader
             var mat = new Material(shader);
             // 달/우주 시점: 얇고 밝은 청록 림
             mat.SetColor("_Color", new Color(0.45f, 0.78f, 1f, 1f));
-            mat.SetFloat("_RimPower", 4.8f);
-            mat.SetFloat("_Intensity", 1.55f);
-            mat.SetFloat("_HorizonBoost", 0.55f);
+            mat.SetFloat("_RimPower", 5.2f);
+            mat.SetFloat("_Intensity", 1.15f);
+            mat.SetFloat("_HorizonBoost", 0.4f);
             return mat;
         }
 

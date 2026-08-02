@@ -21,7 +21,7 @@ Shader "EarthSmasher/OceanCoastal"
         Pass
         {
             Cull Back
-            ZWrite Off
+            ZWrite On
             Blend SrcAlpha OneMinusSrcAlpha
 
             CGPROGRAM
@@ -81,8 +81,9 @@ Shader "EarthSmasher/OceanCoastal"
                 float spec = pow(saturate(dot(n, h)), lerp(16.0, 128.0, _Gloss)) * _SpecIntensity;
                 float ndotl = saturate(dot(n, l));
 
-                float3 col = water.rgb * (0.25 + 0.75 * ndotl) + _LightColor0.rgb * spec * fresnel;
-                float alpha = ocean * lerp(water.a, 0.75, fresnel);
+                float3 col = water.rgb * (0.35 + 0.65 * ndotl) + _LightColor0.rgb * spec * fresnel * 0.65;
+                // 심해는 거의 불투명 — see-through 방지
+                float alpha = ocean * lerp(max(water.a, 0.92), 0.98, fresnel * 0.5);
                 return float4(col, alpha);
             }
             ENDCG

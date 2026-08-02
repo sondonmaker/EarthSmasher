@@ -22,9 +22,9 @@ public class EarthLayerController : MonoBehaviour
     public bool auroraEnabled = true;
     public bool nightLightsEnabled = true;
 
-    [Range(0f, 1f)] public float oceanStrength = 0.65f;
+    [Range(0f, 1f)] public float oceanStrength = 0.95f;
     [Range(0f, 1f)] public float cloudsStrength = 0.9f;
-    [Range(0f, 1f)] public float atmosphereStrength = 0.7f;
+    [Range(0f, 1f)] public float atmosphereStrength = 0.55f;
     [Range(0f, 1f)] public float auroraStrength = 0.85f;
     [Range(0f, 2f)] public float nightLightsStrength = 0.85f;
 
@@ -117,7 +117,7 @@ public class EarthLayerController : MonoBehaviour
         if (_poleS != null) _poleS.gameObject.SetActive(showMagneticPoles && auroraEnabled);
 
         if (_oceanRend != null)
-            SetLayerAlpha(_oceanRend, oceanStrength * 0.75f, false);
+            SetLayerAlpha(_oceanRend, Mathf.Lerp(0.75f, 1f, oceanStrength), false);
 
         if (_cloudsRend != null)
         {
@@ -194,12 +194,12 @@ public class EarthLayerController : MonoBehaviour
         else if (mat.HasProperty("_DeepColor"))
         {
             Color deep = mat.GetColor("_DeepColor");
-            deep.a = alpha * 0.55f;
+            deep.a = Mathf.Clamp01(Mathf.Max(0.85f, alpha));
             mat.SetColor("_DeepColor", deep);
             if (mat.HasProperty("_ShallowColor"))
             {
                 Color shallow = mat.GetColor("_ShallowColor");
-                shallow.a = alpha * 0.42f;
+                shallow.a = Mathf.Clamp01(Mathf.Max(0.75f, alpha * 0.92f));
                 mat.SetColor("_ShallowColor", shallow);
             }
         }
