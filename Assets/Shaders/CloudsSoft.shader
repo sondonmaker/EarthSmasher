@@ -10,6 +10,8 @@ Shader "EarthSmasher/CloudsSoft"
         _CoverageCut ("Coverage Cut", Range(0, 0.5)) = 0.08
         _LightWrap ("Light Wrap", Range(0, 1)) = 0.35
         _Volume ("Volume Shade", Range(0, 1)) = 0.35
+        _PolarThin ("Polar Thinning", Range(0, 1)) = 0.85
+        _PolarStart ("Polar Start", Range(0.2, 0.95)) = 0.58
     }
 
     SubShader
@@ -44,6 +46,8 @@ Shader "EarthSmasher/CloudsSoft"
             float _CoverageCut;
             float _LightWrap;
             float _Volume;
+            float _PolarThin;
+            float _PolarStart;
 
             struct appdata
             {
@@ -83,6 +87,11 @@ Shader "EarthSmasher/CloudsSoft"
                 // 넓은 뭉침(뱅크) 깨기: 중간 밀도는 거의 투명, 가장 진한 핵심만 남김
                 float peak = saturate(pow(density, 2.4));
                 float broken = lerp(density * 0.28, peak, peak);
+
+                // 오로라 띠(고위도/극지) — 텍스처에 소용돌이가 몰려 있어 의도적으로 약화
+                float lat = abs(normalize(i.worldNormal).y); // 0=적도, 1=극
+                float polar = saturate(smoothstep(_PolarStart, 0.95, lat));
+                broken *= lerp(1.0, 1.0 - _PolarThin, polar * polar);
 
                 float thick = saturate(smoothstep(0.45, 0.95, broken));
 

@@ -85,6 +85,8 @@ public static class EarthTextureLoader
         mat.SetFloat("_CoverageCut", 0.28f);
         mat.SetFloat("_LightWrap", 0.35f);
         mat.SetFloat("_Volume", 0.28f);
+        mat.SetFloat("_PolarThin", 0.88f);
+        mat.SetFloat("_PolarStart", 0.55f);
         return mat;
     }
 
