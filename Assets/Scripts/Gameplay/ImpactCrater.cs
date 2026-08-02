@@ -38,15 +38,13 @@ public class ImpactCrater : MonoBehaviour
         var deform = EarthCraterDeform.Ensure(earth);
         int hits = 1;
         if (deform != null)
-            hits = deform.Dig(worldPoint, radiusNorm, huge ? 0.11f : 0.055f, huge, seed);
+            hits = deform.Dig(worldPoint, radiusNorm, huge ? 0.09f : 0.045f, huge, seed);
 
-        // 타격이 쌓일수록 용암 흉터도 더 깊고 넓게
-        float scarScale = 1f + (hits - 1) * 0.12f;
-        SpawnLavaScar(earth.transform, normal, radiusNorm * scarScale, huge, seed, hits);
+        SpawnLavaScar(earth.transform, normal, radiusNorm * (1f + (hits - 1) * 0.08f), huge, seed);
 
         var scorch = EarthSurfaceScorch.Ensure(earth);
         if (scorch != null)
-            scorch.PaintImpactCrater(worldPoint, radiusNorm * (1.1f + hits * 0.08f), seed ^ hits);
+            scorch.PaintImpactCrater(worldPoint, radiusNorm * 1.15f, seed);
     }
 
     static int HashSeed(Vector3 p, float r)
@@ -62,39 +60,26 @@ public class ImpactCrater : MonoBehaviour
     }
 
     /// <summary>구면 위 불규칙 용암 흉터 — 타원 + 들쭉날쭉한 가장자리.</summary>
-    static void SpawnLavaScar(Transform earth, Vector3 normal, float radiusNorm, bool huge, int seed, int hits = 1)
+    static void SpawnLavaScar(Transform earth, Vector3 normal, float radiusNorm, bool huge, int seed)
     {
         Vector3 localN = earth.InverseTransformDirection(normal).normalized;
         if (localN.sqrMagnitude < 1e-6f)
             localN = Vector3.up;
 
         const float meshR = 0.5f;
-        float ang = Mathf.Clamp(radiusNorm * 1.05f, 0.08f, 0.38f);
-        float inset = (huge ? 0.014f : 0.009f) * (1f + (hits - 1) * 0.35f);
-        // 깊게 팔수록 용암을 안쪽으로
-        float shell = Mathf.Lerp(meshR, meshR - 0.12f, Mathf.Clamp01((hits - 1) / 6f));
-
-        // 같은 방향 이전 흉터 제거 — 한 구멍에 하나만
-        for (int i = earth.childCount - 1; i >= 0; i--)
-        {
-            var ch = earth.GetChild(i);
-            if (ch.name.StartsWith("LavaHit") && Vector3.Dot(ch.forward, localN) > 0.92f)
-                Object.Destroy(ch.gameObject);
-        }
+        float ang = Mathf.Clamp(radiusNorm * 1.05f, 0.08f, 0.35f);
 
         var go = new GameObject(huge ? "LavaHitHuge" : "LavaHit");
         go.transform.SetParent(earth, false);
         go.transform.localPosition = Vector3.zero;
-        go.transform.localRotation = Quaternion.LookRotation(
-            localN,
-            Mathf.Abs(Vector3.Dot(localN, Vector3.up)) > 0.95f ? Vector3.right : Vector3.up);
+        go.transform.localRotation = Quaternion.identity;
         go.transform.localScale = Vector3.one;
 
         var mf = go.AddComponent<MeshFilter>();
-        mf.sharedMesh = BuildIrregularScar(48, 16, Vector3.forward, shell, ang, inset, seed ^ hits);
+        mf.sharedMesh = BuildIrregularScar(48, 16, localN, meshR, ang, huge ? 0.012f : 0.008f, seed);
 
         var mr = go.AddComponent<MeshRenderer>();
-        mr.sharedMaterial = CreateLavaFillMaterial(huge || hits >= 3);
+        mr.sharedMaterial = CreateLavaFillMaterial(huge);
         mr.shadowCastingMode = ShadowCastingMode.Off;
         mr.receiveShadows = true;
     }
