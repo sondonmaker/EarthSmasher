@@ -81,6 +81,45 @@ public class OrbitCamera : MonoBehaviour
         _dragging = false;
     }
 
+    /// <summary>
+    /// 달이 지구로 돌진하는 3/4 시네마틱 구도.
+    /// approachOutward = 충돌점 바깥 방향(달 시작 쪽).
+    /// </summary>
+    public void FrameApproachShot(Vector3 approachOutward, float planetRadius, float duration = 0.75f)
+    {
+        if (target == null)
+            return;
+
+        Vector3 approach = approachOutward.normalized;
+        Vector3 side = Vector3.Cross(approach, Vector3.up);
+        if (side.sqrMagnitude < 1e-4f)
+            side = Vector3.Cross(approach, Vector3.right);
+        side.Normalize();
+        Vector3 up = Vector3.Cross(side, approach).normalized;
+
+        // 옆·살짝 위 — 달이 프레임 가장자리에서 지구로 들어오는 구도
+        Vector3 camDir = (-approach * 0.25f + side * 0.9f + up * 0.32f).normalized;
+
+        _focusYaw = Mathf.Atan2(camDir.x, camDir.z) * Mathf.Rad2Deg;
+        _focusPitch = Mathf.Asin(Mathf.Clamp(camDir.y, -1f, 1f)) * Mathf.Rad2Deg;
+        _focusPitch = Mathf.Clamp(_focusPitch, minPitch, maxPitch);
+
+        float fov = Camera.main != null ? Camera.main.fieldOfView : 50f;
+        float half = Mathf.Tan(0.5f * fov * Mathf.Deg2Rad);
+        // 멀리 잡아 달+지구가 같이 보이게
+        float want = (planetRadius / Mathf.Max(0.05f, half)) / 0.28f;
+        _focusDistance = Mathf.Clamp(want, minDistance, maxDistance);
+
+        _fromYaw = yaw;
+        _fromPitch = pitch;
+        _fromDistance = distance;
+        _focusYaw = _fromYaw + Mathf.DeltaAngle(_fromYaw, _focusYaw);
+        _focusDuration = Mathf.Max(0.05f, duration);
+        _focusT = 0f;
+        _focusing = true;
+        _dragging = false;
+    }
+
     /// <summary>시작 시 지구를 크게, 줌아웃하면 은하가 보이게 범위 설정.</summary>
     public void FramePlanet(float radius, float fill = 0.82f)
     {

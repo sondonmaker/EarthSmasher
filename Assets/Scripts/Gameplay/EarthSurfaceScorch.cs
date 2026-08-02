@@ -13,6 +13,14 @@ public class EarthSurfaceScorch : MonoBehaviour
     bool dirty;
     int dirtyFrames;
 
+    static Texture2D lavaColor;
+    static Texture2D lavaEmit;
+    static Texture2D rockColor;
+    static Color32[] lavaColorPx;
+    static Color32[] lavaEmitPx;
+    static Color32[] rockColorPx;
+    static int lavaW, lavaH, rockW, rockH;
+
     public static EarthSurfaceScorch Ensure(EarthPlanet earth)
     {
         if (earth == null)
@@ -189,12 +197,73 @@ public class EarthSurfaceScorch : MonoBehaviour
         dirty = true;
     }
 
+    static void EnsureImpactTextures()
+    {
+        if (lavaColorPx != null)
+            return;
+
+        lavaColor = Resources.Load<Texture2D>("Impact/lava_color");
+        lavaEmit = Resources.Load<Texture2D>("Impact/lava_emission");
+        rockColor = Resources.Load<Texture2D>("Impact/rock_color");
+
+        if (lavaColor != null)
+        {
+            var readable = MakeReadable(lavaColor);
+            lavaColorPx = readable.GetPixels32();
+            lavaW = readable.width;
+            lavaH = readable.height;
+        }
+        if (lavaEmit != null)
+        {
+            var readable = MakeReadable(lavaEmit);
+            lavaEmitPx = readable.GetPixels32();
+        }
+        if (rockColor != null)
+        {
+            var readable = MakeReadable(rockColor);
+            rockColorPx = readable.GetPixels32();
+            rockW = readable.width;
+            rockH = readable.height;
+        }
+    }
+
+    static Texture2D MakeReadable(Texture2D src)
+    {
+        try
+        {
+            if (src.isReadable)
+                return src;
+        }
+        catch { /* ignore */ }
+
+        var rt = RenderTexture.GetTemporary(src.width, src.height, 0, RenderTextureFormat.ARGB32);
+        Graphics.Blit(src, rt);
+        var prev = RenderTexture.active;
+        RenderTexture.active = rt;
+        var copy = new Texture2D(src.width, src.height, TextureFormat.RGBA32, false, false);
+        copy.ReadPixels(new Rect(0, 0, src.width, src.height), 0, 0);
+        copy.Apply(false, false);
+        RenderTexture.active = prev;
+        RenderTexture.ReleaseTemporary(rt);
+        return copy;
+    }
+
+    static Color32 Sample(Color32[] px, int tw, int th, float u, float v)
+    {
+        if (px == null || tw < 1 || th < 1)
+            return new Color32(40, 30, 25, 255);
+        int x = ((int)(u * tw) % tw + tw) % tw;
+        int y = ((int)(v * th) % th + th) % th;
+        return px[y * tw + x];
+    }
+
     /// <summary>
-    /// 달/대형 충돌 크레이터: 검은 분지 + 용암 링 + 방사형 이젝타.
+    /// AmbientCG 용암/암석 텍스처로 부드러운 크레이터 자국 (낙서 선 없음).
     /// </summary>
     public void PaintImpactCrater(Vector3 worldPoint, float radiusNorm = 0.12f)
     {
         EnsureWorkingTexture();
+        EnsureImpactTextures();
         if (working == null || pixels == null)
             return;
 
@@ -210,15 +279,13 @@ public class EarthSurfaceScorch : MonoBehaviour
         int cx = Mathf.Clamp(Mathf.RoundToInt(u * (w - 1)), 0, w - 1);
         int cy = Mathf.Clamp(Mathf.RoundToInt(v * (h - 1)), 0, h - 1);
 
-        float radiusPx = Mathf.Clamp(radiusNorm * w * 0.7f, 18f, w * 0.2f);
-        int r = Mathf.CeilToInt(radiusPx * 1.35f);
+        float radiusPx = Mathf.Clamp(radiusNorm * w * 0.72f, 22f, w * 0.22f);
+        int r = Mathf.CeilToInt(radiusPx * 1.4f);
         float invR = 1f / Mathf.Max(0.001f, radiusPx);
-
-        Color32 basin = new Color32(12, 10, 9, 255);
-        Color32 ash = new Color32(32, 26, 22, 255);
-        Color32 molten = new Color32(255, 90, 18, 255);
-        Color32 glow = new Color32(255, 160, 40, 255);
-        Color32 ejecta = new Color32(48, 40, 34, 255);
+        float uvScale = Random.Range(0.35f, 0.7f);
+        float uvRot = Random.Range(0f, Mathf.PI * 2f);
+        float cosR = Mathf.Cos(uvRot);
+        float sinR = Mathf.Sin(uvRot);
 
         for (int dy = -r; dy <= r; dy++)
         {
@@ -227,201 +294,84 @@ public class EarthSurfaceScorch : MonoBehaviour
                 continue;
             for (int dx = -r; dx <= r; dx++)
             {
+                float dist = Mathf.Sqrt(dx * dx + dy * dy) * invR;
+                if (dist > 1.4f)
+                    continue;
+
                 int x = cx + dx;
                 while (x < 0) x += w;
                 while (x >= w) x -= w;
 
-                float dist = Mathf.Sqrt(dx * dx + dy * dy) * invR;
-                if (dist > 1.35f)
+                // 원형 소프트 마스크
+                float mask;
+                if (dist < 0.55f)
+                    mask = 0.92f;
+                else if (dist < 0.85f)
+                    mask = Mathf.Lerp(0.92f, 0.55f, (dist - 0.55f) / 0.3f);
+                else
+                    mask = Mathf.SmoothStep(1f, 0f, (dist - 0.85f) / 0.55f) * 0.55f;
+
+                if (mask < 0.02f)
                     continue;
 
-                int idx = y * w + x;
-                Color32 p = pixels[idx];
+                float lx = (dx * cosR - dy * sinR) * uvScale / radiusPx;
+                float ly = (dx * sinR + dy * cosR) * uvScale / radiusPx;
+                float su = Mathf.Abs(lx) + 0.5f;
+                float sv = Mathf.Abs(ly) + 0.5f;
 
-                if (dist <= 0.55f)
+                Color32 rock = Sample(rockColorPx, rockW, rockH, su, sv);
+                Color32 lava = Sample(lavaColorPx, lavaW, lavaH, su * 1.3f, sv * 1.3f);
+                Color32 emit = Sample(lavaEmitPx, lavaW, lavaH, su * 1.3f, sv * 1.3f);
+
+                // 중심=어두운 암석+약한 용암, 링=용암, 바깥=재
+                Color32 target;
+                if (dist < 0.42f)
                 {
-                    // 분지 중심 — 거의 검게
-                    float a = Mathf.SmoothStep(1f, 0.35f, dist / 0.55f);
-                    p.r = (byte)Mathf.RoundToInt(Mathf.Lerp(p.r, basin.r, a));
-                    p.g = (byte)Mathf.RoundToInt(Mathf.Lerp(p.g, basin.g, a));
-                    p.b = (byte)Mathf.RoundToInt(Mathf.Lerp(p.b, basin.b, a));
+                    float t = dist / 0.42f;
+                    byte er = (byte)Mathf.Min(255, rock.r / 3 + emit.r / 5);
+                    byte eg = (byte)Mathf.Min(255, rock.g / 4 + emit.g / 8);
+                    byte eb = (byte)Mathf.Min(255, rock.b / 5);
+                    var dark = new Color32(er, eg, eb, 255);
+                    target = Color32.Lerp(dark, rock, t * 0.35f);
                 }
-                else if (dist <= 0.78f)
+                else if (dist < 0.78f)
                 {
-                    // 용암 링
-                    float rim = 1f - Mathf.Abs(dist - 0.66f) / 0.14f;
+                    float rim = 1f - Mathf.Abs(dist - 0.6f) / 0.2f;
                     rim = Mathf.Clamp01(rim);
-                    rim *= rim;
-                    Color32 hot = Color32.Lerp(molten, glow, rim * 0.55f);
-                    p.r = (byte)Mathf.RoundToInt(Mathf.Lerp(p.r, hot.r, rim * 0.92f));
-                    p.g = (byte)Mathf.RoundToInt(Mathf.Lerp(p.g, hot.g, rim * 0.85f));
-                    p.b = (byte)Mathf.RoundToInt(Mathf.Lerp(p.b, hot.b, rim * 0.7f));
+                    // emission으로 용암 링 — 선이 아니라 텍스처 덩어리
+                    var hot = new Color32(
+                        (byte)Mathf.Min(255, (lava.r * 2 + emit.r) / 3),
+                        (byte)Mathf.Min(255, (lava.g + emit.g) / 2),
+                        (byte)Mathf.Min(255, lava.b / 2),
+                        255);
+                    target = Color32.Lerp(rock, hot, rim * 0.85f);
                 }
                 else
                 {
-                    // 바깥 재/이젝타 담요
-                    float a = Mathf.SmoothStep(1f, 0f, (dist - 0.78f) / 0.57f) * 0.7f;
-                    p.r = (byte)Mathf.RoundToInt(Mathf.Lerp(p.r, ash.r, a));
-                    p.g = (byte)Mathf.RoundToInt(Mathf.Lerp(p.g, ash.g, a));
-                    p.b = (byte)Mathf.RoundToInt(Mathf.Lerp(p.b, ash.b, a));
+                    target = new Color32(
+                        (byte)(rock.r * 0.45f),
+                        (byte)(rock.g * 0.4f),
+                        (byte)(rock.b * 0.38f),
+                        255);
                 }
 
-                pixels[idx] = p;
-            }
-        }
-
-        // 방사형 이젝타 줄무늬
-        int rays = 14;
-        float baseAng = Random.Range(0f, Mathf.PI * 2f);
-        for (int i = 0; i < rays; i++)
-        {
-            float ang = baseAng + (Mathf.PI * 2f * i / rays) + Random.Range(-0.12f, 0.12f);
-            float len = radiusPx * Random.Range(0.95f, 1.45f);
-            int steps = Mathf.Max(10, Mathf.RoundToInt(len));
-            float x = cx + Mathf.Cos(ang) * radiusPx * 0.55f;
-            float y = cy + Mathf.Sin(ang) * radiusPx * 0.55f * (h / (float)w);
-
-            for (int s = 0; s < steps; s++)
-            {
-                x += Mathf.Cos(ang);
-                y += Mathf.Sin(ang) * (h / (float)w);
-                int ix = Mathf.RoundToInt(x);
-                int iy = Mathf.RoundToInt(y);
-                if (iy < 0 || iy >= h)
-                    break;
-                while (ix < 0) ix += w;
-                while (ix >= w) ix -= w;
-
-                float tip = 1f - s / (float)steps;
-                float amount = 0.25f + tip * 0.45f;
-                int thick = tip > 0.4f ? 1 : 0;
-                for (int dy = -thick; dy <= thick; dy++)
-                {
-                    int yy = iy + dy;
-                    if (yy < 0 || yy >= h)
-                        continue;
-                    for (int dx = -thick; dx <= thick; dx++)
-                    {
-                        int xx = ix + dx;
-                        while (xx < 0) xx += w;
-                        while (xx >= w) xx -= w;
-                        int idx = yy * w + xx;
-                        Color32 p = pixels[idx];
-                        p.r = (byte)Mathf.RoundToInt(Mathf.Lerp(p.r, ejecta.r, amount));
-                        p.g = (byte)Mathf.RoundToInt(Mathf.Lerp(p.g, ejecta.g, amount));
-                        p.b = (byte)Mathf.RoundToInt(Mathf.Lerp(p.b, ejecta.b, amount));
-                        pixels[idx] = p;
-                    }
-                }
-            }
-        }
-
-        // 용암 균열 — 분지에서 바깥으로 빛나는 금
-        PaintLavaCracksAtUv(cx, cy, radiusPx, Mathf.RoundToInt(Mathf.Lerp(10f, 22f, radiusNorm / 0.25f)));
-
-        dirty = true;
-    }
-
-    /// <summary>
-    /// 충돌 후 용암처럼 빛나는 방사형 크랙.
-    /// </summary>
-    public void PaintLavaCracks(Vector3 worldPoint, float radiusNorm = 0.12f, int branches = 16)
-    {
-        EnsureWorkingTexture();
-        if (working == null || pixels == null)
-            return;
-
-        Vector3 local = transform.InverseTransformPoint(worldPoint);
-        if (local.sqrMagnitude < 1e-6f)
-            return;
-
-        EarthGeo.DirectionToLatLon(local.normalized, out float lat, out float lon);
-        EarthGeo.LatLonToUv(lat, lon, out float u, out float v);
-
-        int w = working.width;
-        int h = working.height;
-        int cx = Mathf.Clamp(Mathf.RoundToInt(u * (w - 1)), 0, w - 1);
-        int cy = Mathf.Clamp(Mathf.RoundToInt(v * (h - 1)), 0, h - 1);
-        float radiusPx = Mathf.Clamp(radiusNorm * w * 0.75f, 20f, w * 0.22f);
-        PaintLavaCracksAtUv(cx, cy, radiusPx, branches);
-        dirty = true;
-    }
-
-    void PaintLavaCracksAtUv(int cx, int cy, float radiusPx, int branches)
-    {
-        int w = working.width;
-        int h = working.height;
-        branches = Mathf.Clamp(branches, 6, 28);
-        float baseAngle = Random.Range(0f, Mathf.PI * 2f);
-
-        Color32 core = new Color32(255, 220, 80, 255);   // 노란 핵
-        Color32 lava = new Color32(255, 70, 10, 255);    // 주황 용암
-        Color32 ember = new Color32(180, 30, 8, 255);    // 가장자리 잿빛
-
-        for (int b = 0; b < branches; b++)
-        {
-            float ang = baseAngle + (Mathf.PI * 2f * b / branches) + Random.Range(-0.4f, 0.4f);
-            float len = radiusPx * Random.Range(0.65f, 1.35f);
-            int steps = Mathf.Max(12, Mathf.RoundToInt(len));
-            float x = cx;
-            float y = cy;
-            float dir = ang;
-            bool split = Random.value > 0.55f;
-            float splitAt = Random.Range(0.35f, 0.7f);
-
-            for (int s = 0; s < steps; s++)
-            {
-                float t = s / (float)steps;
-                dir += Random.Range(-0.32f, 0.32f);
-                if (split && t > splitAt)
-                    dir += Random.Range(-0.55f, 0.55f);
-
-                x += Mathf.Cos(dir) * (0.85f + Random.Range(0f, 0.4f));
-                y += Mathf.Sin(dir) * (h / (float)w) * (0.85f + Random.Range(0f, 0.4f));
-
-                int ix = Mathf.RoundToInt(x);
-                int iy = Mathf.RoundToInt(y);
-                if (iy < 0 || iy >= h)
-                    break;
-                while (ix < 0) ix += w;
-                while (ix >= w) ix -= w;
-
-                // 중심부일수록 밝고 두껍게
-                float heat = Mathf.Lerp(1f, 0.25f, t);
-                int thick = heat > 0.7f ? 2 : (heat > 0.4f ? 1 : 0);
-                Color32 col = heat > 0.75f ? core : (heat > 0.4f ? lava : ember);
-                StampCrack(ix, iy, thick, col, 0.65f + heat * 0.35f);
-
-                // 주변에 약한 열기 후광
-                if (heat > 0.5f && (s % 2 == 0))
-                    StampCrack(ix, iy, thick + 1, lava, 0.25f * heat);
-            }
-        }
-
-        // 분지 바닥 용암 웅덩이
-        int poolR = Mathf.CeilToInt(radiusPx * 0.28f);
-        for (int dy = -poolR; dy <= poolR; dy++)
-        {
-            int y = cy + dy;
-            if (y < 0 || y >= h) continue;
-            for (int dx = -poolR; dx <= poolR; dx++)
-            {
-                float d = Mathf.Sqrt(dx * dx + dy * dy) / Mathf.Max(1f, poolR);
-                if (d > 1f) continue;
-                int x = cx + dx;
-                while (x < 0) x += w;
-                while (x >= w) x -= w;
-                float a = (1f - d) * (1f - d) * Random.Range(0.45f, 0.95f);
-                if (a < 0.15f) continue;
-                Color32 hot = Color32.Lerp(ember, core, a);
                 int idx = y * w + x;
                 Color32 p = pixels[idx];
-                p.r = (byte)Mathf.RoundToInt(Mathf.Lerp(p.r, hot.r, a));
-                p.g = (byte)Mathf.RoundToInt(Mathf.Lerp(p.g, hot.g, a * 0.9f));
-                p.b = (byte)Mathf.RoundToInt(Mathf.Lerp(p.b, hot.b, a * 0.55f));
+                float a = mask;
+                p.r = (byte)Mathf.RoundToInt(Mathf.Lerp(p.r, target.r, a));
+                p.g = (byte)Mathf.RoundToInt(Mathf.Lerp(p.g, target.g, a));
+                p.b = (byte)Mathf.RoundToInt(Mathf.Lerp(p.b, target.b, a));
                 pixels[idx] = p;
             }
         }
+
+        dirty = true;
+    }
+
+    /// <summary>호환용 — 낙서 크랙 대신 텍스처 크레이터만 강화.</summary>
+    public void PaintLavaCracks(Vector3 worldPoint, float radiusNorm = 0.12f, int branches = 16)
+    {
+        PaintImpactCrater(worldPoint, radiusNorm * 0.85f);
     }
 
     /// <summary>

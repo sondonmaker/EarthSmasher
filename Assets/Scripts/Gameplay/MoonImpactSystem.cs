@@ -76,13 +76,17 @@ public class MoonImpactSystem : MonoBehaviour
         MoonImpactReport report = BuildReport(mode, lat, lon);
         LastReport = report;
 
-        // 카메라 강제 포커스 없음 — Orbit/Crash 중에도 자유롭게 조작
         Vector3 worldDir = earth != null
             ? earth.transform.TransformDirection(localDir).normalized
             : localDir;
         center = earth != null ? earth.transform.position : Vector3.zero;
 
-        yield return null;
+        // 시네마틱: 달이 지구로 향하는 3/4 구도 (드래그하면 언제든 해제)
+        var orbitCam = Object.FindObjectOfType<OrbitCamera>();
+        if (orbitCam != null)
+            orbitCam.FrameApproachShot(worldDir, R, 0.65f);
+
+        yield return WaitSim(0.55f);
 
         CleanupLeftoverFx();
         moonGo = SpawnMoon(R);
@@ -109,7 +113,7 @@ public class MoonImpactSystem : MonoBehaviour
     /// </summary>
     IEnumerator RunOrbit(GameObject moon, Vector3 center, Vector3 approachDir, float R, MoonImpactReport report)
     {
-        // 카메라 기준으로 횡단 → 화면에서 달이 왼쪽→오른쪽(또는 반대)으로 확실히 보임
+        // 시네마틱 구도 기준으로 횡단 — 달이 화면에서 지구를 스치며 지나감
         var cam = Camera.main;
         Vector3 toCam = cam != null
             ? (cam.transform.position - center).normalized
@@ -120,25 +124,22 @@ public class MoonImpactSystem : MonoBehaviour
             flyDir = Vector3.Cross(toCam, Vector3.up);
         flyDir.Normalize();
 
-        // 지구 앞쪽(카메라 쪽)을 스침 — 충돌 거리보다 살짝 멀리
-        Vector3 closest = center + toCam * (R * 1.6f);
-        Vector3 p0 = closest - flyDir * (R * 6.5f) + toCam * (R * 1.2f);
+        Vector3 closest = center + toCam * (R * 1.55f);
+        Vector3 p0 = closest - flyDir * (R * 7.5f) + toCam * (R * 1.8f);
         Vector3 p1 = closest;
-        Vector3 p2 = closest + flyDir * (R * 6.5f) + toCam * (R * 0.4f);
+        Vector3 p2 = closest + flyDir * (R * 7.0f) + toCam * (R * 0.5f);
 
         moon.transform.position = p0;
 
         bool tidalDone = false;
         float t = 0f;
-        // 전체 플라이바이 ~2초
         while (t < 1f)
         {
-            t += Time.unscaledDeltaTime * Sim() * 0.55f;
+            t += Time.unscaledDeltaTime * Sim() * 0.5f;
             float u = Mathf.SmoothStep(0f, 1f, Mathf.Clamp01(t));
             moon.transform.position = Bezier(p0, p1, p2, u);
             moon.transform.Rotate(Vector3.up, 90f * Time.deltaTime * Sim(), Space.Self);
 
-            // 최근접 순간 — 조석 지진 (폭발/크레이터 없음)
             if (!tidalDone && u >= 0.48f)
             {
                 tidalDone = true;
@@ -148,10 +149,8 @@ public class MoonImpactSystem : MonoBehaviour
                 var scorch = earth != null ? EarthSurfaceScorch.Ensure(earth) : null;
                 if (scorch != null)
                 {
-                    scorch.CrackAt(hit, 0.08f, 10);
-                    scorch.BurnAt(hit, 0.045f, 0.4f);
-                    Vector3 coast = center + (hitNormal + flyDir * 0.5f).normalized * R;
-                    scorch.CrackAt(coast, 0.055f, 7);
+                    scorch.BurnAt(hit, 0.05f, 0.45f);
+                    scorch.CrackAt(hit, 0.07f, 8);
                 }
                 SpawnDustCloud(hit, hitNormal, R * 0.07f, 12);
             }
@@ -166,17 +165,17 @@ public class MoonImpactSystem : MonoBehaviour
     IEnumerator RunCrash(GameObject moon, Vector3 center, Vector3 approachDir, float R, MoonImpactReport report)
     {
         Vector3 impact = center + approachDir * R;
-        Vector3 start = center + approachDir * (R * 6.0f);
+        // 멀리서 시작해 프레임에 달이 먼저 보이게
+        Vector3 start = center + approachDir * (R * 8.5f);
         moon.transform.position = start;
 
         float t = 0f;
         while (t < 1f)
         {
-            // 가속 돌진 — 약 1초 안에 충돌
-            float speed = Mathf.Lerp(0.9f, 2.4f, t);
+            float speed = Mathf.Lerp(0.55f, 2.2f, t);
             t += Time.unscaledDeltaTime * Sim() * speed;
             float u = Mathf.Clamp01(t);
-            u = u * u; // ease-in: 끝으로 갈수록 더 빨라짐
+            u = u * u;
             moon.transform.position = Vector3.Lerp(start, impact, u);
             moon.transform.Rotate(Vector3.right, 120f * Time.deltaTime * Sim(), Space.Self);
             yield return null;
