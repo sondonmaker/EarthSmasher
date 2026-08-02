@@ -12,6 +12,19 @@ public class MeteorImpactBootstrap : MonoBehaviour
     [SerializeField] bool createHud = true;
     [SerializeField] bool enableFracture = true;
 
+    /// <summary>씬에 Bootstrap이 없어도 Play 시 자동 생성 (빈 SampleScene 대비).</summary>
+    [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
+    static void AutoBootIfNeeded()
+    {
+        if (UnityEngine.Object.FindObjectOfType<MeteorImpactBootstrap>() != null)
+            return;
+        if (UnityEngine.Object.FindObjectOfType<EarthPlanet>() != null)
+            return;
+        var go = new GameObject("Bootstrap");
+        go.AddComponent<MeteorImpactBootstrap>();
+        Debug.Log("[MeteorImpactBootstrap] Auto-created (scene had no Bootstrap).");
+    }
+
     void Awake()
     {
         SetupLighting();
