@@ -375,41 +375,88 @@ public class EarthSurfaceScorch : MonoBehaviour
         if (working == null || pixels == null)
             return;
 
-        Vector3 local = transform.InverseTransformPoint(worldPoint);
-        if (local.sqrMagnitude < 1e-6f)
+        if (!TryImpactUv(worldPoint, out int cx, out int cy, out _, out _))
             return;
 
-        EarthGeo.DirectionToLatLon(local.normalized, out float lat, out float lon);
-        EarthGeo.LatLonToUv(lat, lon, out float u, out float v);
+        float radiusPx = Mathf.Clamp(radiusNorm * working.width * 0.6f, 10f, working.width * 0.12f);
+        BurnAt(worldPoint, radiusNorm * 0.35f, 0.35f);
+        PaintDarkBranches(cx, cy, 0f, radiusPx, branches, false);
+        dirty = true;
+    }
 
+    /// <summary>
+    /// 용암 원 가장자리에서 바깥으로 충격 크랙이 퍼짐.
+    /// startFrac = 크레이터 반경 대비 시작(보통 0.55~0.75), endMul = 바깥으로 몇 배까지.
+    /// </summary>
+    public void PaintShockCracks(Vector3 worldPoint, float craterRadiusNorm, float startFrac, float endMul, int branches, bool moltenCore)
+    {
+        EnsureWorkingTexture();
+        EnsureImpactTextures();
+        if (working == null || pixels == null)
+            return;
+
+        if (!TryImpactUv(worldPoint, out int cx, out int cy, out _, out _))
+            return;
+
+        float craterPx = Mathf.Clamp(craterRadiusNorm * working.width * 0.72f, 22f, working.width * 0.22f);
+        float startR = craterPx * Mathf.Clamp(startFrac, 0.3f, 0.95f);
+        float endR = craterPx * Mathf.Clamp(endMul, 1.1f, 3.5f);
+        PaintDarkBranches(cx, cy, startR, endR, branches, moltenCore);
+        dirty = true;
+    }
+
+    bool TryImpactUv(Vector3 worldPoint, out int cx, out int cy, out float lat, out float lon)
+    {
+        cx = cy = 0;
+        lat = lon = 0f;
+        Vector3 local = transform.InverseTransformPoint(worldPoint);
+        if (local.sqrMagnitude < 1e-6f)
+            return false;
+
+        EarthGeo.DirectionToLatLon(local.normalized, out lat, out lon);
+        EarthGeo.LatLonToUv(lat, lon, out float u, out float v);
         int w = working.width;
         int h = working.height;
-        int cx = Mathf.Clamp(Mathf.RoundToInt(u * (w - 1)), 0, w - 1);
-        int cy = Mathf.Clamp(Mathf.RoundToInt(v * (h - 1)), 0, h - 1);
+        cx = Mathf.Clamp(Mathf.RoundToInt(u * (w - 1)), 0, w - 1);
+        cy = Mathf.Clamp(Mathf.RoundToInt(v * (h - 1)), 0, h - 1);
+        return true;
+    }
 
-        float radiusPx = Mathf.Clamp(radiusNorm * w * 0.6f, 10f, w * 0.12f);
-
-        // 진앙 약한 그을림
-        BurnAt(worldPoint, radiusNorm * 0.35f, 0.35f);
-
-        Color32 crack = new Color32(18, 14, 12, 255);
-        branches = Mathf.Clamp(branches, 3, 14);
+    void PaintDarkBranches(int cx, int cy, float startR, float endR, int branches, bool moltenCore)
+    {
+        int w = working.width;
+        int h = working.height;
+        float aspect = h / (float)w;
+        branches = Mathf.Clamp(branches, 4, 28);
         float baseAngle = Random.Range(0f, Mathf.PI * 2f);
+
+        Color32 edge = new Color32(16, 12, 10, 255);
+        Color32 deep = new Color32(8, 6, 5, 255);
+        Color32 ember = new Color32(120, 28, 8, 255);
 
         for (int b = 0; b < branches; b++)
         {
-            float ang = baseAngle + (Mathf.PI * 2f * b / branches) + Random.Range(-0.35f, 0.35f);
-            float len = radiusPx * Random.Range(0.55f, 1.05f);
-            int steps = Mathf.Max(8, Mathf.RoundToInt(len));
-            float x = cx;
-            float y = cy;
-            float dir = ang;
+            float ang = baseAngle + (Mathf.PI * 2f * b / branches) + Random.Range(-0.28f, 0.28f);
+            float len = (endR - startR) * Random.Range(0.7f, 1.15f);
+            int steps = Mathf.Max(14, Mathf.RoundToInt(len));
+
+            // 용암 원 테두리에서 시작 → 바깥으로
+            float x = cx + Mathf.Cos(ang) * startR;
+            float y = cy + Mathf.Sin(ang) * startR * aspect;
+            float dir = ang + Random.Range(-0.15f, 0.15f);
+            bool fork = Random.value > 0.55f;
+            float forkAt = Random.Range(0.35f, 0.65f);
 
             for (int s = 0; s < steps; s++)
             {
-                dir += Random.Range(-0.28f, 0.28f);
-                x += Mathf.Cos(dir);
-                y += Mathf.Sin(dir) * (h / (float)w); // aspect-ish
+                float t = s / (float)steps;
+                dir += Random.Range(-0.22f, 0.22f);
+                if (fork && t > forkAt)
+                    dir += Random.Range(-0.4f, 0.4f);
+
+                float step = 0.9f + Random.Range(0f, 0.45f);
+                x += Mathf.Cos(dir) * step;
+                y += Mathf.Sin(dir) * step * aspect;
 
                 int ix = Mathf.RoundToInt(x);
                 int iy = Mathf.RoundToInt(y);
@@ -418,13 +465,19 @@ public class EarthSurfaceScorch : MonoBehaviour
                 while (ix < 0) ix += w;
                 while (ix >= w) ix -= w;
 
-                float tip = 1f - s / (float)steps;
-                int thick = tip > 0.55f ? 1 : 0;
-                StampCrack(ix, iy, thick, crack, 0.55f + tip * 0.4f);
+                float tip = 1f - t;
+                int thick = tip > 0.65f ? 2 : (tip > 0.3f ? 1 : 0);
+
+                // 바깥쪽은 어두운 크랙, 안쪽(용암 근처)만 약한 잔열
+                Color32 col = tip > 0.55f && moltenCore ? ember : (tip > 0.35f ? deep : edge);
+                float amt = 0.5f + tip * 0.45f;
+                StampCrack(ix, iy, thick, col, amt);
+
+                // 크랙 가장자리 살짝 어둡게 (두께감)
+                if (thick >= 1)
+                    StampCrack(ix, iy, thick + 1, edge, 0.22f * tip);
             }
         }
-
-        dirty = true;
     }
 
     void StampCrack(int cx, int cy, int thick, Color32 col, float amount)

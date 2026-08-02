@@ -134,7 +134,15 @@ public class BigMeteorBody : MonoBehaviour
         CinematicExplosion.Play(_impact, _normal, _power);
         ImpactShockwave.Spawn(_impact, _normal, _earth != null ? _earth.Radius * 0.8f : 2f);
         if (_earth != null)
+        {
             ImpactCrater.Spawn(_earth.transform, _impact, _normal, 1.35f);
+            var scorch = EarthSurfaceScorch.Ensure(_earth);
+            if (scorch != null)
+            {
+                // 운석도 맞은 원 밖으로 크랙 한 번
+                scorch.PaintShockCracks(_impact, 0.1f, 0.65f, 2.2f, 12, true);
+            }
+        }
 
         _onDone?.Invoke();
         Destroy(gameObject);
