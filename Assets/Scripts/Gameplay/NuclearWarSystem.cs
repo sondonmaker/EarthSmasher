@@ -133,48 +133,66 @@ public class NuclearWarSystem : MonoBehaviour
         NuclearWarReport report = BuildReport(units);
         LastReport = report;
 
-        int blastCount = Mathf.Clamp(Mathf.RoundToInt(units * 0.85f), 12, 120);
-        float duration = Mathf.Lerp(6f, 14f, units / 100f);
+        int missileCount = Mathf.Clamp(Mathf.RoundToInt(units * 0.85f), 12, 120);
+        int maxConcurrent = Mathf.Clamp(Mathf.RoundToInt(8 + units * 0.08f), 8, 28);
+        float launchSpacing = Mathf.Lerp(0.22f, 0.08f, Mathf.Clamp01(units / 100f));
 
         long deathsLeft = report.totalDeaths;
+        long deathPerHit = System.Math.Max(1, report.totalDeaths / missileCount);
 
-        for (int i = 0; i < blastCount; i++)
+        int launched = 0;
+        int inflight = 0;
+        int impacts = 0;
+
+        while (launched < missileCount || inflight > 0)
         {
-            StrikeSite site = Sites[Random.Range(0, Sites.Length)];
-            // bias toward nuclear powers
-            if (!site.nuclearPower && Random.value > 0.35f)
-                site = Sites[Random.Range(0, 16)];
+            while (launched < missileCount && inflight < maxConcurrent)
+            {
+                StrikeSite target = PickTarget();
+                StrikeSite origin = PickLaunchSite(target);
 
-            float jitterLat = site.lat + Random.Range(-2.5f, 2.5f);
-            float jitterLon = site.lon + Random.Range(-3.5f, 3.5f);
-            Vector3 dir = EarthGeo.LatLonToDirection(jitterLat, jitterLon);
-            float radius = earth != null ? earth.Radius : 2.5f;
-            Vector3 point = (earth != null ? earth.transform.position : Vector3.zero) + dir * radius;
-            Vector3 normal = dir;
+                float tLat = target.lat + Random.Range(-2.2f, 2.2f);
+                float tLon = target.lon + Random.Range(-3f, 3f);
+                float oLat = origin.lat + Random.Range(-1.5f, 1.5f);
+                float oLon = origin.lon + Random.Range(-2f, 2f);
 
-            float power = Random.Range(0.7f, 1.6f) * Mathf.Lerp(0.8f, 1.25f, site.weight);
-            if (earth != null)
-                NuclearBlast.Play(earth, point, normal, power);
+                float ang = Vector3.Angle(
+                    EarthGeo.LatLonToDirection(oLat, oLon),
+                    EarthGeo.LatLonToDirection(tLat, tLon));
+                float flight = Mathf.Lerp(1.6f, 4.2f, Mathf.Clamp01(ang / 140f));
+                float power = Random.Range(0.75f, 1.65f) * Mathf.Lerp(0.85f, 1.25f, target.weight);
 
-            long chunk = report.totalDeaths / blastCount;
-            if (i == blastCount - 1)
-                chunk = deathsLeft;
-            deathsLeft -= chunk;
-            if (pop != null && chunk > 0)
-                pop.ApplyCasualties(chunk);
+                inflight++;
+                launched++;
 
-            float wait = duration / blastCount;
-            wait *= Random.Range(0.55f, 1.35f);
-            yield return new WaitForSeconds(wait);
+                NuclearMissile.Launch(
+                    earth, oLat, oLon, tLat, tLon, power, flight,
+                    () =>
+                    {
+                        inflight = Mathf.Max(0, inflight - 1);
+                        impacts++;
+                        long chunk = impacts >= missileCount
+                            ? deathsLeft
+                            : System.Math.Min(deathPerHit, deathsLeft);
+                        deathsLeft = System.Math.Max(0, deathsLeft - chunk);
+                        if (pop != null && chunk > 0)
+                            pop.ApplyCasualties(chunk);
+                    });
+
+                float wait = launchSpacing * Random.Range(0.55f, 1.35f);
+                float sim = WorldStatusHud.Instance != null ? WorldStatusHud.Instance.SimSpeed : 1f;
+                yield return new WaitForSecondsRealtime(wait / Mathf.Max(0.05f, sim));
+            }
+
+            yield return null;
         }
 
+        // 잔여 사망 보정
         if (pop != null)
         {
-            // ensure report deaths applied (rounding)
-            long target = PopulationSystem.BaselinePopulation - report.totalDeaths;
-            // keep growth that happened before pause relative — just clamp to not exceed start-deaths
-            if (pop.Population > target)
-                pop.ApplyCasualties(pop.Population - target);
+            long targetPop = PopulationSystem.BaselinePopulation - report.totalDeaths;
+            if (pop.Population > targetPop)
+                pop.ApplyCasualties(pop.Population - targetPop);
             pop.GrowthPaused = false;
         }
 
@@ -182,6 +200,26 @@ public class NuclearWarSystem : MonoBehaviour
 
         var reportUi = NuclearWarReportUI.Ensure();
         reportUi.Show(report);
+    }
+
+    StrikeSite PickTarget()
+    {
+        StrikeSite site = Sites[Random.Range(0, Sites.Length)];
+        if (!site.nuclearPower && Random.value > 0.35f)
+            site = Sites[Random.Range(0, 16)];
+        return site;
+    }
+
+    StrikeSite PickLaunchSite(StrikeSite target)
+    {
+        // 핵보유국에서 다른 목표로 발사
+        for (int attempt = 0; attempt < 12; attempt++)
+        {
+            StrikeSite origin = Sites[Random.Range(0, 16)];
+            if (origin.code != target.code)
+                return origin;
+        }
+        return Sites[0].code != target.code ? Sites[0] : Sites[6];
     }
 
     NuclearWarReport BuildReport(int units)

@@ -34,6 +34,7 @@ public class BigMeteorStrike : MonoBehaviour
     {
         if (earth == null) return;
         if (EarthLayerToolbar.BlocksGameplayInput || ZoomUiBlocker.BlocksGameplay || WorldStatusHud.BlocksGameplay) return;
+        if (DisasterUiGate.ModalOpen) return;
         if (Time.time < _readyAt) return;
         if (!WantsBigStrike()) return;
 
@@ -133,7 +134,7 @@ public class BigMeteorBody : MonoBehaviour
         CinematicExplosion.Play(_impact, _normal, _power);
         ImpactShockwave.Spawn(_impact, _normal, _earth != null ? _earth.Radius * 0.8f : 2f);
         if (_earth != null)
-            ImpactCrater.Spawn(_earth.transform, _impact, _normal, 0.9f);
+            ImpactCrater.Spawn(_earth.transform, _impact, _normal, 1.35f);
 
         _onDone?.Invoke();
         Destroy(gameObject);

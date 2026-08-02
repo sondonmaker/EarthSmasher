@@ -42,6 +42,7 @@ public class MeteorLauncher : MonoBehaviour
     {
         if (earth == null) return;
         if (EarthLayerToolbar.BlocksGameplayInput || ZoomUiBlocker.BlocksGameplay || WorldStatusHud.BlocksGameplay) return;
+        if (DisasterUiGate.ModalOpen) return;
 
         RefreshHud();
 

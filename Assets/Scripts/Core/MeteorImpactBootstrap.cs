@@ -87,6 +87,16 @@ public class MeteorImpactBootstrap : MonoBehaviour
             war = new GameObject("NuclearWarSystem").AddComponent<NuclearWarSystem>();
         war.Configure(earth);
 
+        var quake = FindObjectOfType<EarthquakeSystem>();
+        if (quake == null)
+            quake = new GameObject("EarthquakeSystem").AddComponent<EarthquakeSystem>();
+        quake.Configure(earth);
+
+        var moon = FindObjectOfType<MoonImpactSystem>();
+        if (moon == null)
+            moon = new GameObject("MoonImpactSystem").AddComponent<MoonImpactSystem>();
+        moon.Configure(earth);
+
         if (FindObjectOfType<EarthControlPanel>() == null)
         {
             var body = earth.GetComponent<EarthBodyData>();

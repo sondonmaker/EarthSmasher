@@ -24,12 +24,62 @@ public class OrbitCamera : MonoBehaviour
     Vector2 _pressPos;
     Vector2 _lastPos;
 
+    bool _focusing;
+    float _focusYaw;
+    float _focusPitch;
+    float _focusDistance;
+    float _focusDuration;
+    float _focusT;
+    float _fromYaw;
+    float _fromPitch;
+    float _fromDistance;
+
     public float Distance => distance;
     public float MinDistance => minDistance;
     public float MaxDistance => maxDistance;
     public bool IsDragging => _dragging;
 
     public void SetTarget(Transform t) => target = t;
+
+    /// <summary>
+    /// 지구 표면 방향(월드)이 화면 중앙에 오도록 궤도를 돌린다.
+    /// </summary>
+    public void FocusOnWorldDirection(Vector3 worldDirFromCenter, float duration = 0.85f, float zoomFill = 0.72f)
+    {
+        if (target == null)
+            return;
+
+        Vector3 toCam = worldDirFromCenter.normalized;
+        if (toCam.sqrMagnitude < 1e-6f)
+            return;
+
+        // ApplyTransform: offset = Euler(pitch,yaw,0) * (0,0,-distance)
+        _focusYaw = Mathf.Atan2(toCam.x, toCam.z) * Mathf.Rad2Deg;
+        _focusPitch = Mathf.Asin(Mathf.Clamp(toCam.y, -1f, 1f)) * Mathf.Rad2Deg;
+        _focusPitch = Mathf.Clamp(_focusPitch, minPitch, maxPitch);
+
+        float planetR = 2.5f;
+        var earth = target.GetComponent<EarthPlanet>();
+        if (earth != null)
+            planetR = earth.Radius;
+        float fov = Camera.main != null ? Camera.main.fieldOfView : 50f;
+        float half = Mathf.Tan(0.5f * fov * Mathf.Deg2Rad);
+        _focusDistance = Mathf.Clamp(
+            (planetR / Mathf.Max(0.05f, half)) / Mathf.Clamp(zoomFill, 0.4f, 0.95f),
+            minDistance, maxDistance);
+
+        _fromYaw = yaw;
+        _fromPitch = pitch;
+        _fromDistance = distance;
+        // shortest yaw lerp
+        float dy = Mathf.DeltaAngle(_fromYaw, _focusYaw);
+        _focusYaw = _fromYaw + dy;
+
+        _focusDuration = Mathf.Max(0.05f, duration);
+        _focusT = 0f;
+        _focusing = true;
+        _dragging = false;
+    }
 
     /// <summary>시작 시 지구를 크게, 줌아웃하면 은하가 보이게 범위 설정.</summary>
     public void FramePlanet(float radius, float fill = 0.82f)
@@ -57,9 +107,31 @@ public class OrbitCamera : MonoBehaviour
     void LateUpdate()
     {
         if (target == null) return;
+
+        // 사이드/HUD/줌 UI 위에 있을 때만 막음. 재해 연출·리포트 열려 있어도 카메라 자유.
+        bool uiBlocks = EarthLayerToolbar.BlocksGameplayInput
+            || ZoomUiBlocker.BlocksGameplay
+            || WorldStatusHud.BlocksGameplay;
+
+        // 드래그/줌이면 자동 포커스 즉시 끊고 같은 프레임에 조작
+        if (_focusing && !uiBlocks && WantsOrbitInterrupt())
+            _focusing = false;
+
+        if (_focusing)
+        {
+            _focusT += Time.unscaledDeltaTime / _focusDuration;
+            float u = Mathf.SmoothStep(0f, 1f, Mathf.Clamp01(_focusT));
+            yaw = Mathf.Lerp(_fromYaw, _focusYaw, u);
+            pitch = Mathf.Lerp(_fromPitch, _focusPitch, u);
+            distance = Mathf.Lerp(_fromDistance, _focusDistance, u);
+            if (_focusT >= 1f)
+                _focusing = false;
+        }
+
         HandleZoom();
-        if (!EarthLayerToolbar.BlocksGameplayInput && !ZoomUiBlocker.BlocksGameplay && !WorldStatusHud.BlocksGameplay)
+        if (!_focusing && !uiBlocks)
             HandleOrbit();
+
         ApplyTransform();
     }
 
@@ -104,6 +176,28 @@ public class OrbitCamera : MonoBehaviour
             if (Mathf.Abs(key) > 0.01f)
                 Zoom(key * keyZoomSpeed * Time.deltaTime);
         }
+    }
+
+    bool WantsOrbitInterrupt()
+    {
+        var mouse = Mouse.current;
+        if (mouse != null)
+        {
+            if (mouse.leftButton.isPressed || mouse.leftButton.wasPressedThisFrame)
+                return true;
+            if (mouse.scroll.ReadValue().y != 0f)
+                return true;
+        }
+
+        var touchscreen = Touchscreen.current;
+        if (touchscreen != null && ActiveTouchCount(touchscreen) > 0)
+            return true;
+
+        var kb = Keyboard.current;
+        if (kb != null && (kb.equalsKey.isPressed || kb.minusKey.isPressed || kb.numpadPlusKey.isPressed || kb.numpadMinusKey.isPressed))
+            return true;
+
+        return false;
     }
 
     void HandleOrbit()
