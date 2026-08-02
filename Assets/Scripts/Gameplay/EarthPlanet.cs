@@ -12,9 +12,11 @@ public class EarthPlanet : MonoBehaviour
     [SerializeField] Transform coreVisual;
     [SerializeField] Color healthyTint = Color.white;
     [SerializeField] Color damagedTint = new Color(1f, 0.45f, 0.25f);
+    [SerializeField] Color nuclearTint = new Color(0.42f, 0.36f, 0.30f);
     [SerializeField] int coreRevealAfterHits = 8;
 
     float _heat;
+    float _nuclearScorch;
     int _impactCount;
     MaterialPropertyBlock _mpb;
 
@@ -46,15 +48,23 @@ public class EarthPlanet : MonoBehaviour
         Damaged?.Invoke(_heat * 100f, worldPoint);
     }
 
+    public void ApplyNuclearScorch(float intensity)
+    {
+        _nuclearScorch = Mathf.Clamp01(Mathf.Max(_nuclearScorch, intensity));
+        ApplyVisuals();
+    }
+
     void ApplyVisuals()
     {
         float t = _heat;
 
         if (crustRenderer != null)
         {
+            Color baseTint = Color.Lerp(healthyTint, damagedTint, t);
+            Color finalTint = Color.Lerp(baseTint, nuclearTint, _nuclearScorch * 0.85f);
             crustRenderer.GetPropertyBlock(_mpb);
-            _mpb.SetColor("_Color", Color.Lerp(healthyTint, damagedTint, t));
-            _mpb.SetColor("_BaseColor", Color.Lerp(healthyTint, damagedTint, t));
+            _mpb.SetColor("_Color", finalTint);
+            _mpb.SetColor("_BaseColor", finalTint);
             crustRenderer.SetPropertyBlock(_mpb);
         }
 

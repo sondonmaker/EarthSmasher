@@ -33,7 +33,7 @@ public class BigMeteorStrike : MonoBehaviour
     void Update()
     {
         if (earth == null) return;
-        if (EarthLayerToolbar.BlocksGameplayInput || ZoomUiBlocker.BlocksGameplay) return;
+        if (EarthLayerToolbar.BlocksGameplayInput || ZoomUiBlocker.BlocksGameplay || WorldStatusHud.BlocksGameplay) return;
         if (Time.time < _readyAt) return;
         if (!WantsBigStrike()) return;
 

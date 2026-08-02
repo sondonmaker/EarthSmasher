@@ -31,6 +31,13 @@ public class EarthSpin : MonoBehaviour
 
     void Update()
     {
-        transform.Rotate(Vector3.up, baseDegreesPerSecond * multiplier * Time.deltaTime, Space.Self);
+        float sim = 1f;
+        if (WorldStatusHud.Instance != null)
+            sim = WorldStatusHud.Instance.SimSpeed;
+
+        float deg = baseDegreesPerSecond * multiplier * sim * Time.unscaledDeltaTime;
+        if (Mathf.Abs(deg) < 1e-8f)
+            return;
+        transform.Rotate(Vector3.up, deg, Space.Self);
     }
 }

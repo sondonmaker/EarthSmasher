@@ -48,7 +48,7 @@ public class ImpactHud : MonoBehaviour
         EnsureStyles();
         float w = 360f;
         float x = Screen.width - w - 16f;
-        float y = 16f;
+        float y = 58f; // 상단 바 아래
         float h = 28f;
 
         string target = _targeting ? "TARGET: EARTH" : "TARGET: ---";

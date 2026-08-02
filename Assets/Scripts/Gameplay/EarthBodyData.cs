@@ -17,6 +17,11 @@ public class EarthBodyData : MonoBehaviour
     // 실제 자전: 1 sidereal day = 86164.0905 s → 15.041°/h
     public const double SiderealDayHours = 23.9344696;
 
+    // —— Climate (표시용, 참고 UI 기준) ——
+    public const double SurfaceTempC = 14.9;
+    public const double AtmosphericPressureMbar = 1079.0;
+    public const double CarbonDioxidePpm = 432.0;
+
     [SerializeField] float rotationMultiplier = 1f;
     [SerializeField] bool rotationEnabled = true;
 

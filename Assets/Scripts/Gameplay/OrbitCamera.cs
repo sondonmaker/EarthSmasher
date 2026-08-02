@@ -58,7 +58,7 @@ public class OrbitCamera : MonoBehaviour
     {
         if (target == null) return;
         HandleZoom();
-        if (!EarthLayerToolbar.BlocksGameplayInput && !ZoomUiBlocker.BlocksGameplay)
+        if (!EarthLayerToolbar.BlocksGameplayInput && !ZoomUiBlocker.BlocksGameplay && !WorldStatusHud.BlocksGameplay)
             HandleOrbit();
         ApplyTransform();
     }

@@ -23,8 +23,9 @@ public class MeteorImpactBootstrap : MonoBehaviour
         if (cam == null)
             cam = CreateCamera();
 
-        cam.clearFlags = CameraClearFlags.SolidColor;
-        cam.backgroundColor = new Color(0.005f, 0.008f, 0.02f);
+        cam.clearFlags = CameraClearFlags.Skybox;
+        cam.backgroundColor = Color.black;
+        cam.farClipPlane = Mathf.Max(cam.farClipPlane, 400f);
         if (FindObjectOfType<SpaceBackdrop>() == null)
         {
             var space = new GameObject("SpaceBackdrop");
@@ -69,6 +70,32 @@ public class MeteorImpactBootstrap : MonoBehaviour
 
         if (enableFracture && earth.GetComponent<EarthFractureSystem>() == null)
             earth.gameObject.AddComponent<EarthFractureSystem>();
+
+        EnsureWorldSystems(earth);
+    }
+
+    static void EnsureWorldSystems(EarthPlanet earth)
+    {
+        if (FindObjectOfType<PopulationSystem>() == null)
+            new GameObject("PopulationSystem").AddComponent<PopulationSystem>();
+
+        if (FindObjectOfType<WorldStatusHud>() == null)
+            new GameObject("WorldStatusHud").AddComponent<WorldStatusHud>();
+
+        var war = FindObjectOfType<NuclearWarSystem>();
+        if (war == null)
+            war = new GameObject("NuclearWarSystem").AddComponent<NuclearWarSystem>();
+        war.Configure(earth);
+
+        if (FindObjectOfType<EarthControlPanel>() == null)
+        {
+            var body = earth.GetComponent<EarthBodyData>();
+            if (body == null)
+                body = earth.gameObject.AddComponent<EarthBodyData>();
+            var layers = earth.GetComponent<EarthLayerController>();
+            var panelGo = new GameObject("EarthControlPanel");
+            panelGo.AddComponent<EarthControlPanel>().Bind(body, layers);
+        }
     }
 
     void SetupLighting()
@@ -173,10 +200,10 @@ public class MeteorImpactBootstrap : MonoBehaviour
         var go = new GameObject("Main Camera");
         go.tag = "MainCamera";
         var cam = go.AddComponent<Camera>();
-        cam.clearFlags = CameraClearFlags.SolidColor;
-        cam.backgroundColor = new Color(0.01f, 0.01f, 0.03f);
+        cam.clearFlags = CameraClearFlags.Skybox;
+        cam.backgroundColor = Color.black;
         cam.nearClipPlane = 0.1f;
-        cam.farClipPlane = 200f;
+        cam.farClipPlane = 400f;
         go.AddComponent<AudioListener>();
         return cam;
     }

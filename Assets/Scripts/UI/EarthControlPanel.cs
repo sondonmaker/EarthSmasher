@@ -13,8 +13,8 @@ public class EarthControlPanel : MonoBehaviour
 
     const float PanelW = 300f;
     const float ArrowW = 26f;
-    const float Top = 10f;
-    const float PanelH = 560f;
+    const float Top = 56f;
+    const float PanelH = 520f;
 
     static readonly float[] RotationPresets = { 0.1f, 0.5f, 1f, 2f, 10f };
     static readonly string[] RotationLabels = { "x0.1", "x0.5", "x1", "x2", "x10" };
@@ -39,11 +39,32 @@ public class EarthControlPanel : MonoBehaviour
 
     Vector2 scroll;
     int tosFlash;
+    int nuclearUnits = 100;
+    string nuclearUnitsEdit = "100";
+    string statusMsg;
+
+    // Disaster accordion
+    int expandedDisaster = -1;
+    float asteroidDiameter = 1f;
+    string asteroidEdit = "1.0";
+    float icbmMt = 1f;
+    string icbmEdit = "1";
+    float earthquakeM = 1f;
+    string earthquakeEdit = "1.0";
+    string waterEdit = "1e20";
+    Texture2D expandBg;
+    Texture2D execBg;
 
     public void Bind(EarthBodyData data, EarthLayerController layerController)
     {
         body = data;
         layers = layerController;
+    }
+
+    public void OpenTab(Tab t)
+    {
+        tab = t;
+        expanded = true;
     }
 
     void EnsureStyles()
@@ -57,6 +78,8 @@ public class EarthControlPanel : MonoBehaviour
         toggleOn = MakeTex(new Color(0.35f, 0.72f, 1f, 1f));
         toggleOff = MakeTex(new Color(0.28f, 0.3f, 0.34f, 1f));
         knob = MakeTex(Color.white);
+        expandBg = MakeTex(new Color(0.1f, 0.11f, 0.14f, 0.95f));
+        execBg = MakeTex(new Color(0.85f, 0.28f, 0.18f, 1f));
 
         GameSettings.Load();
 
@@ -145,7 +168,8 @@ public class EarthControlPanel : MonoBehaviour
             panelRect = arrowRect;
         }
 
-        BlocksGameplayInput = IsMouseInRect(panelRect) || IsMouseInRect(arrowRect);
+        BlocksGameplayInput = IsMouseInRect(panelRect) || IsMouseInRect(arrowRect)
+            || NuclearWarReportUI.IsOpen;
         EarthLayerToolbar.BlocksGameplayInput = BlocksGameplayInput;
     }
 
@@ -189,10 +213,10 @@ public class EarthControlPanel : MonoBehaviour
                 DrawOverview();
                 break;
             case Tab.Climate:
-                DrawPlaceholder("Climate coming soon");
+                DrawClimate();
                 break;
             case Tab.Disaster:
-                DrawPlaceholder("Disaster coming soon");
+                DrawDisaster();
                 break;
             case Tab.Tool:
                 DrawTool();
@@ -240,9 +264,240 @@ public class EarthControlPanel : MonoBehaviour
         StatRow("p", "Orbital Period", EarthBodyData.OrbitalPeriodDays.ToString("0.00"), "days");
     }
 
+    void DrawClimate()
+    {
+        StatRow("T", "Surface Temp", EarthBodyData.SurfaceTempC.ToString("0.0"), "C");
+        StatRow("P", "Atmospheric Pressure", ((int)EarthBodyData.AtmosphericPressureMbar).ToString("#,0"), "mbar");
+        StatRow("C", "Carbon Dioxide", EarthBodyData.CarbonDioxidePpm.ToString("0"), "ppm");
+    }
+
+    void DrawDisaster()
+    {
+        DrawDisasterItem(0, "$", "Planetary Collision", "200", "sci", false,
+            "Cost 200 science. Crash another planet into Earth.",
+            () => ExecuteStub("Planetary Collision"));
+
+        DrawDisasterItem(1, "A", "Asteroid Diameter", asteroidEdit, "km", true,
+            "Set asteroid size, then Execute to drop it.",
+            () =>
+            {
+                if (float.TryParse(asteroidEdit, out float v))
+                    asteroidDiameter = Mathf.Clamp(v, 0.1f, 500f);
+                asteroidEdit = asteroidDiameter.ToString("0.#");
+                ExecuteStub($"Asteroid {asteroidDiameter:0.#} km");
+            },
+            () => DrawFloatEditor(ref asteroidEdit, ref asteroidDiameter, 0.1f, 500f, 0.5f));
+
+        DrawDisasterItem(2, "I", "ICBM", icbmEdit, "Mt", true,
+            "Nuclear missile yield (megatons).",
+            () =>
+            {
+                if (float.TryParse(icbmEdit, out float v))
+                    icbmMt = Mathf.Clamp(v, 0.1f, 1000f);
+                icbmEdit = icbmMt.ToString("0.#");
+                ExecuteStub($"ICBM {icbmMt:0.#} Mt");
+            },
+            () => DrawFloatEditor(ref icbmEdit, ref icbmMt, 0.1f, 1000f, 1f));
+
+        DrawDisasterItem(3, "N", "Nuclear War", nuclearUnitsEdit, "unit", true,
+            "Global nuclear exchange. Units scale casualties & blasts.",
+            ExecuteNuclearWar,
+            () => DrawIntEditor(ref nuclearUnitsEdit, ref nuclearUnits, 1, 500, 10));
+
+        DrawDisasterItem(4, "E", "Earthquake", earthquakeEdit, "M", true,
+            "Richter magnitude earthquake.",
+            () =>
+            {
+                if (float.TryParse(earthquakeEdit, out float v))
+                    earthquakeM = Mathf.Clamp(v, 0.1f, 12f);
+                earthquakeEdit = earthquakeM.ToString("0.0");
+                ExecuteStub($"Earthquake M{earthquakeM:0.0}");
+            },
+            () => DrawFloatEditor(ref earthquakeEdit, ref earthquakeM, 0.1f, 12f, 0.5f));
+
+        DrawDisasterItem(5, "M", "Moon Impact", "-", "", false,
+            "Send the Moon on a collision course.",
+            () => ExecuteStub("Moon Impact"));
+
+        DrawDisasterItem(6, "W", "Water Planet", waterEdit, "L", true,
+            "Flood volume applied to the planet.",
+            () => ExecuteStub($"Water Planet {waterEdit} L"),
+            () =>
+            {
+                GUILayout.BeginHorizontal();
+                GUILayout.Label("Volume", _nameStyle, GUILayout.Width(70));
+                waterEdit = GUILayout.TextField(waterEdit, _valueStyle, GUILayout.Height(28));
+                GUILayout.Label("L", _unitStyle, GUILayout.Width(20));
+                GUILayout.EndHorizontal();
+            });
+
+        if (!string.IsNullOrEmpty(statusMsg))
+        {
+            GUILayout.Space(8);
+            GUILayout.Label(statusMsg, _hint);
+        }
+    }
+
+    void DrawDisasterItem(
+        int id,
+        string icon,
+        string name,
+        string value,
+        string unit,
+        bool editable,
+        string description,
+        System.Action onExecute,
+        System.Action drawEditor = null)
+    {
+        bool open = expandedDisaster == id;
+        float h = 40f;
+        Rect row = GUILayoutUtility.GetRect(1, h, GUILayout.ExpandWidth(true));
+
+        // highlight when open
+        if (open)
+            GUI.DrawTexture(row, expandBg);
+
+        var iconStyle = new GUIStyle(GUI.skin.label)
+        {
+            fontSize = 16,
+            alignment = TextAnchor.MiddleCenter
+        };
+        iconStyle.normal.textColor = new Color(0.75f, 0.78f, 0.85f);
+        GUI.Label(new Rect(row.x, row.y, 28, h), icon, iconStyle);
+        GUI.Label(new Rect(row.x + 30, row.y, 118, h), name, _nameStyle);
+
+        float unitW = string.IsNullOrEmpty(unit) ? 0f : 36f;
+        float boxW = 64f;
+        Rect box = new Rect(row.x + 148, row.y + 6, boxW, h - 12);
+        GUI.Box(box, GUIContent.none, _boxStyle);
+        GUI.Label(box, value, _valueStyle);
+        if (!string.IsNullOrEmpty(unit))
+            GUI.Label(new Rect(box.xMax + 4, row.y, unitW, h), unit, _unitStyle);
+
+        // chevron
+        var chev = new GUIStyle(_unitStyle) { alignment = TextAnchor.MiddleCenter, fontSize = 14 };
+        chev.normal.textColor = Color.white;
+        GUI.Label(new Rect(row.xMax - 22, row.y, 20, h), open ? "v" : ">", chev);
+
+        if (GUI.Button(row, GUIContent.none, GUIStyle.none))
+            expandedDisaster = open ? -1 : id;
+
+        GUILayout.Space(2);
+
+        if (!open)
+            return;
+
+        // hidden detail panel
+        Rect detail = GUILayoutUtility.GetRect(1, editable ? 118f : 88f, GUILayout.ExpandWidth(true));
+        GUI.DrawTexture(detail, expandBg);
+
+        GUILayout.BeginArea(new Rect(detail.x + 10, detail.y + 6, detail.width - 20, detail.height - 10));
+        GUILayout.Label(description, _hint);
+        GUILayout.Space(4);
+
+        if (drawEditor != null)
+            drawEditor();
+
+        GUILayout.FlexibleSpace();
+
+        var war = NuclearWarSystem.Instance;
+        bool busy = id == 3 && war != null && war.IsRunning;
+        Color prev = GUI.backgroundColor;
+        GUI.backgroundColor = busy ? new Color(0.4f, 0.25f, 0.2f) : new Color(0.9f, 0.3f, 0.18f);
+        GUI.enabled = !busy;
+
+        string execLabel = busy ? "Running..." : "Execute";
+        if (GUILayout.Button(execLabel, GUILayout.Height(32)))
+            onExecute?.Invoke();
+
+        GUI.enabled = true;
+        GUI.backgroundColor = prev;
+        GUILayout.EndArea();
+
+        GUILayout.Space(6);
+    }
+
+    void DrawFloatEditor(ref string edit, ref float value, float min, float max, float step)
+    {
+        GUILayout.BeginHorizontal();
+        if (GUILayout.Button("-", GUILayout.Width(32), GUILayout.Height(28)))
+        {
+            value = Mathf.Max(min, value - step);
+            edit = value.ToString("0.##");
+        }
+        edit = GUILayout.TextField(edit, _valueStyle, GUILayout.Height(28));
+        if (float.TryParse(edit, out float parsed))
+            value = Mathf.Clamp(parsed, min, max);
+        if (GUILayout.Button("+", GUILayout.Width(32), GUILayout.Height(28)))
+        {
+            value = Mathf.Min(max, value + step);
+            edit = value.ToString("0.##");
+        }
+        GUILayout.EndHorizontal();
+    }
+
+    void DrawIntEditor(ref string edit, ref int value, int min, int max, int step)
+    {
+        GUILayout.BeginHorizontal();
+        if (GUILayout.Button("-", GUILayout.Width(32), GUILayout.Height(28)))
+        {
+            value = Mathf.Max(min, value - step);
+            edit = value.ToString();
+        }
+        edit = GUILayout.TextField(edit, _valueStyle, GUILayout.Height(28));
+        if (int.TryParse(edit, out int parsed))
+            value = Mathf.Clamp(parsed, min, max);
+        if (GUILayout.Button("+", GUILayout.Width(32), GUILayout.Height(28)))
+        {
+            value = Mathf.Min(max, value + step);
+            edit = value.ToString();
+        }
+        GUILayout.Label("unit", _unitStyle, GUILayout.Width(36));
+        GUILayout.EndHorizontal();
+    }
+
+    void ExecuteNuclearWar()
+    {
+        ParseNuclearUnits();
+        var war = NuclearWarSystem.Instance;
+        if (war == null)
+        {
+            statusMsg = "NuclearWarSystem missing";
+            return;
+        }
+        if (war.TryStart(nuclearUnits))
+        {
+            statusMsg = $"Executing Nuclear War ({nuclearUnits} unit)...";
+            expanded = false;
+            expandedDisaster = -1;
+        }
+        else
+        {
+            statusMsg = "Nuclear War already running";
+        }
+    }
+
+    void ExecuteStub(string name)
+    {
+        statusMsg = $"{name} — Execute queued (effect coming soon)";
+    }
+
+    void EditableUnitRow(string icon, string name, ref string edit, ref int value, string unit)
+    {
+        // kept for compatibility; disaster UI uses accordion now
+        DrawIntEditor(ref edit, ref value, 1, 500, 10);
+    }
+
+    void ParseNuclearUnits()
+    {
+        if (int.TryParse(nuclearUnitsEdit, out int v))
+            nuclearUnits = Mathf.Clamp(v, 1, 500);
+        nuclearUnitsEdit = nuclearUnits.ToString();
+    }
+
     void StatRow(string icon, string name, string value, string unit)
     {
-        float h = 36f;
+        float h = 40f;
         Rect row = GUILayoutUtility.GetRect(1, h, GUILayout.ExpandWidth(true));
 
         var iconStyle = new GUIStyle(GUI.skin.label)
@@ -252,15 +507,19 @@ public class EarthControlPanel : MonoBehaviour
         };
         iconStyle.normal.textColor = new Color(0.75f, 0.78f, 0.85f);
         GUI.Label(new Rect(row.x, row.y, 28, h), icon, iconStyle);
-        GUI.Label(new Rect(row.x + 30, row.y, 110, h), name, _nameStyle);
 
-        float boxW = string.IsNullOrEmpty(unit) ? row.width - 150 : 100;
-        Rect box = new Rect(row.x + 145, row.y + 5, boxW, h - 10);
+        float nameW = 132f;
+        GUI.Label(new Rect(row.x + 30, row.y, nameW, h), name, _nameStyle);
+
+        float unitW = string.IsNullOrEmpty(unit) ? 0f : 42f;
+        float boxX = row.x + 30 + nameW + 4;
+        float boxW = Mathf.Max(72f, row.width - (boxX - row.x) - unitW - 4);
+        Rect box = new Rect(boxX, row.y + 6, boxW, h - 12);
         GUI.Box(box, GUIContent.none, _boxStyle);
         GUI.Label(box, value, _valueStyle);
 
         if (!string.IsNullOrEmpty(unit))
-            GUI.Label(new Rect(box.xMax + 6, row.y, 60, h), unit, _unitStyle);
+            GUI.Label(new Rect(box.xMax + 4, row.y, unitW, h), unit, _unitStyle);
 
         GUILayout.Space(4);
     }
