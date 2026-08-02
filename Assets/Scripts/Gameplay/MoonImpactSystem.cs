@@ -191,8 +191,8 @@ public class MoonImpactSystem : MonoBehaviour
         SpawnDustCloud(impact, approachDir, R * 0.18f, 22);
         SpawnDustVeil(center, R * 1.08f);
 
-        // 땅이 확실히 움푹 파이도록 크게·깊게
-        ImpactCrater.SpawnHuge(earth, impact, 0.28f, 0.22f);
+        // 표면 스카 + 얕은 자국 (공 찌그러짐 연출 아님)
+        ImpactCrater.SpawnHuge(earth, impact, 0.2f, 0.03f);
 
         var scorch = earth != null ? EarthSurfaceScorch.Ensure(earth) : null;
         if (scorch != null)
