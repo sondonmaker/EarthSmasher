@@ -166,6 +166,9 @@ public class MeteorImpactBootstrap : MonoBehaviour
 
         var clouds = CreateLayerSphere("Clouds", earthGo.transform, 1.028f, EarthTextureLoader.CreateCloudMaterial(), true);
         clouds.AddComponent<EarthSpin>().SetSpeed(3.2f);
+        // 두 번째 구름층 — 레퍼런스처럼 더 풍성하고 깊이 있게
+        var cloudsHi = CreateLayerSphere("CloudsHigh", clouds.transform, 1.014f, EarthTextureLoader.CreateCloudDetailMaterial(), false);
+        cloudsHi.AddComponent<EarthSpin>().SetSpeed(-1.1f);
 
         // 대기 림라이트 (안쪽 선명 + 바깥 헤일로)
         var atmosphere = CreateLayerSphere("Atmosphere", earthGo.transform, 1.055f, EarthTextureLoader.CreateAtmosphereMaterial(), false);
