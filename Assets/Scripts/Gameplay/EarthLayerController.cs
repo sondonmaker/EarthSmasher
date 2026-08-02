@@ -24,7 +24,7 @@ public class EarthLayerController : MonoBehaviour
 
     [Range(0f, 1f)] public float oceanStrength = 0.65f;
     [Range(0f, 1f)] public float cloudsStrength = 0.7f;
-    [Range(0f, 1f)] public float atmosphereStrength = 0.45f;
+    [Range(0f, 1f)] public float atmosphereStrength = 0.7f;
     [Range(0f, 1f)] public float auroraStrength = 0.85f;
     [Range(0f, 2f)] public float nightLightsStrength = 0.85f;
 
@@ -145,6 +145,12 @@ public class EarthLayerController : MonoBehaviour
     void ApplyNightLights()
     {
         if (_crustMat == null) return;
+
+        if (_crustMat.HasProperty("_NightIntensity"))
+        {
+            _crustMat.SetFloat("_NightIntensity", nightLightsEnabled ? nightLightsStrength * 1.2f : 0f);
+            return;
+        }
 
         if (nightLightsEnabled && _crustMat.HasProperty("_EmissionColor"))
         {

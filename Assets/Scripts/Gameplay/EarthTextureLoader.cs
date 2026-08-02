@@ -23,30 +23,40 @@ public static class EarthTextureLoader
         var day = dayOverride != null ? dayOverride : Day;
         var night = nightOverride != null ? nightOverride : Night;
 
-        var mat = new Material(Shader.Find("Standard"));
+        var space = Shader.Find("EarthSmasher/EarthFromSpace");
+        if (space != null)
+        {
+            var mat = new Material(space);
+            if (day != null)
+                mat.mainTexture = day;
+            if (night != null)
+                mat.SetTexture("_NightTex", night);
+            mat.color = new Color(0.82f, 0.86f, 0.9f, 1f);
+            mat.SetFloat("_Exposure", 0.72f);
+            mat.SetFloat("_Contrast", 1.28f);
+            mat.SetFloat("_Terminator", 0.26f);
+            mat.SetFloat("_NightIntensity", 1.05f);
+            mat.SetFloat("_AmbientFloor", 0.018f);
+            return mat;
+        }
+
+        var fb = new Material(Shader.Find("Standard"));
         if (day != null)
         {
-            mat.mainTexture = day;
-            // 살짝 어둡게 — 구름/림이 더 살아나게
-            mat.color = new Color(0.88f, 0.9f, 0.92f, 1f);
-            mat.SetFloat("_Glossiness", 0.48f);
-            mat.SetFloat("_Metallic", 0.02f);
+            fb.mainTexture = day;
+            fb.color = new Color(0.75f, 0.78f, 0.82f, 1f);
+            fb.SetFloat("_Glossiness", 0.35f);
         }
         else
-        {
-            mat.color = new Color(0.12f, 0.38f, 0.85f);
-            mat.SetFloat("_Glossiness", 0.55f);
-        }
+            fb.color = new Color(0.08f, 0.2f, 0.45f);
 
         if (night != null)
         {
-            mat.EnableKeyword("_EMISSION");
-            mat.SetTexture("_EmissionMap", night);
-            // 낮 쪽은 약하게, 밤 도시광
-            mat.SetColor("_EmissionColor", new Color(1.15f, 1.05f, 0.9f) * 0.55f);
+            fb.EnableKeyword("_EMISSION");
+            fb.SetTexture("_EmissionMap", night);
+            fb.SetColor("_EmissionColor", new Color(1.1f, 1f, 0.85f) * 0.45f);
         }
-
-        return mat;
+        return fb;
     }
 
     public static Material CreateCloudMaterial()
@@ -65,7 +75,7 @@ public static class EarthTextureLoader
 
         var mat = new Material(shader);
         mat.mainTexture = Clouds;
-        mat.SetFloat("_Strength", 0.38f);
+        mat.SetFloat("_Strength", 0.48f);
         mat.SetFloat("_Threshold", 0.2f);
         mat.SetFloat("_Softness", 1.15f);
         return mat;
@@ -153,10 +163,11 @@ public static class EarthTextureLoader
         if (shader != null)
         {
             var mat = new Material(shader);
-            mat.SetColor("_Color", new Color(0.55f, 0.78f, 1f, 1f));
-            mat.SetFloat("_RimPower", 3.2f);
-            mat.SetFloat("_Intensity", 0.85f);
-            mat.SetFloat("_HorizonBoost", 0.25f);
+            // 달/우주 시점: 얇고 밝은 청록 림
+            mat.SetColor("_Color", new Color(0.45f, 0.78f, 1f, 1f));
+            mat.SetFloat("_RimPower", 4.8f);
+            mat.SetFloat("_Intensity", 1.55f);
+            mat.SetFloat("_HorizonBoost", 0.55f);
             return mat;
         }
 
@@ -176,10 +187,10 @@ public static class EarthTextureLoader
         if (shader == null) return CreateAtmosphereMaterial();
 
         var mat = new Material(shader);
-        mat.SetColor("_Color", new Color(0.7f, 0.85f, 1f, 1f));
-        mat.SetFloat("_RimPower", 2.4f);
-        mat.SetFloat("_Intensity", 0.35f);
-        mat.SetFloat("_HorizonBoost", 0.12f);
+        mat.SetColor("_Color", new Color(0.55f, 0.8f, 1f, 1f));
+        mat.SetFloat("_RimPower", 3.6f);
+        mat.SetFloat("_Intensity", 0.28f);
+        mat.SetFloat("_HorizonBoost", 0.2f);
         return mat;
     }
 

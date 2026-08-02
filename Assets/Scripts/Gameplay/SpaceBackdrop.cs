@@ -68,10 +68,9 @@ public class SpaceBackdrop : MonoBehaviour
             skyMat.SetFloat("_ImageType", 0f); // 0 = 360 Degrees
 
         RenderSettings.skybox = skyMat;
-        RenderSettings.ambientMode = UnityEngine.Rendering.AmbientMode.Trilight;
-        RenderSettings.ambientSkyColor = new Color(0.04f, 0.05f, 0.08f);
-        RenderSettings.ambientEquatorColor = new Color(0.02f, 0.025f, 0.04f);
-        RenderSettings.ambientGroundColor = Color.black;
+        // 우주/달 시점: 앰비언트 거의 0 — 태양광만으로 지구를 비춤
+        RenderSettings.ambientMode = UnityEngine.Rendering.AmbientMode.Flat;
+        RenderSettings.ambientLight = new Color(0.01f, 0.012f, 0.02f);
         DynamicGI.UpdateEnvironment();
 
         ApplyCameraSkybox();

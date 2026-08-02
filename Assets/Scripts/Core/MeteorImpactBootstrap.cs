@@ -35,9 +35,10 @@ public class MeteorImpactBootstrap : MonoBehaviour
         var orbit = cam.GetComponent<OrbitCamera>();
         if (orbit == null) orbit = cam.gameObject.AddComponent<OrbitCamera>();
         orbit.SetTarget(earth.transform);
-        orbit.FramePlanet(earth.Radius, 0.82f);
+        // 달에서 본 지구처럼 — 조금 멀리, 텔레포토 느낌
+        orbit.FramePlanet(earth.Radius, 0.58f);
         if (cam.orthographic == false)
-            cam.fieldOfView = 50f;
+            cam.fieldOfView = 42f;
 
         if (FindObjectOfType<ZoomControls>() == null)
         {
@@ -118,29 +119,25 @@ public class MeteorImpactBootstrap : MonoBehaviour
             sun.type = LightType.Directional;
         }
 
-        sun.color = new Color(1f, 0.97f, 0.9f);
-        sun.intensity = 1.65f;
+        // 우주: 강한 단일 태양광 + 거의 없는 앰비언트 (= 달에서 본 지구)
+        sun.color = new Color(1f, 0.98f, 0.94f);
+        sun.intensity = 2.1f;
         sun.shadows = LightShadows.Soft;
-        sun.shadowStrength = 0.55f;
-        sun.transform.rotation = Quaternion.Euler(28f, -48f, 0f);
+        sun.shadowStrength = 0.85f;
+        sun.transform.rotation = Quaternion.Euler(32f, -52f, 0f);
 
-        // 약한 보조광 — 그림자 쪽을 완전히 죽이지 않음
-        if (GameObject.Find("FillLight") == null)
+        var fillGo = GameObject.Find("FillLight");
+        if (fillGo != null)
         {
-            var fillGo = new GameObject("FillLight");
-            var fill = fillGo.AddComponent<Light>();
-            fill.type = LightType.Directional;
-            fill.color = new Color(0.35f, 0.45f, 0.75f);
-            fill.intensity = 0.28f;
-            fill.shadows = LightShadows.None;
-            fillGo.transform.rotation = Quaternion.Euler(15f, 140f, 0f);
+            var fill = fillGo.GetComponent<Light>();
+            if (fill != null)
+                fill.intensity = 0.04f; // 거의 끄기 — 씻김 방지
         }
 
-        RenderSettings.ambientMode = UnityEngine.Rendering.AmbientMode.Trilight;
-        RenderSettings.ambientSkyColor = new Color(0.08f, 0.1f, 0.16f);
-        RenderSettings.ambientEquatorColor = new Color(0.04f, 0.05f, 0.08f);
-        RenderSettings.ambientGroundColor = Color.black;
-        RenderSettings.reflectionIntensity = 0.4f;
+        RenderSettings.ambientMode = UnityEngine.Rendering.AmbientMode.Flat;
+        RenderSettings.ambientLight = new Color(0.012f, 0.014f, 0.022f);
+        RenderSettings.reflectionIntensity = 0.15f;
+        RenderSettings.fog = false;
     }
 
     EarthPlanet CreateEarth()
