@@ -195,31 +195,12 @@ public class MoonImpactSystem : MonoBehaviour
         float craterR = 0.22f;
         ImpactCrater.SpawnHuge(earth, impact, craterR, 0.09f);
 
-        // 쉐이크와 함께 용암 원 테두리 → 바깥으로 크랙 전파
-        var scorch = earth != null ? EarthSurfaceScorch.Ensure(earth) : null;
-        if (scorch != null)
-            yield return SpreadCracksAfterHit(scorch, impact, craterR);
+        // 쉐이크와 함께 용암 균열이 바깥으로 갈라짐 (텍스처 + 발광 리본)
+        yield return MoltenCrackFx.Play(earth, impact, craterR);
 
-        yield return WaitSim(0.5f);
-        CameraShake.Shake(0.8f, 0.4f);
         yield return WaitSim(0.45f);
-    }
-
-    /// <summary>충돌 직후 흔들릴 때 크랙이 단계적으로 퍼지게.</summary>
-    IEnumerator SpreadCracksAfterHit(EarthSurfaceScorch scorch, Vector3 impact, float craterRadiusNorm)
-    {
-        // 1파: 용암 테두리에서 짧게
-        scorch.PaintShockCracks(impact, craterRadiusNorm, 0.62f, 1.35f, 14, true);
-        yield return WaitSim(0.28f);
-
-        // 2파: 더 멀리, 잔열 약함
-        scorch.PaintShockCracks(impact, craterRadiusNorm, 0.7f, 2.1f, 18, true);
-        CameraShake.Shake(0.55f, 0.55f);
-        yield return WaitSim(0.32f);
-
-        // 3파: 주변 대지까지 어두운 크랙
-        scorch.PaintShockCracks(impact, craterRadiusNorm, 0.85f, 2.9f, 16, false);
-        yield return WaitSim(0.35f);
+        CameraShake.Shake(0.8f, 0.4f);
+        yield return WaitSim(0.4f);
     }
 
     MoonImpactReport BuildReport(MoonImpactMode mode, float lat, float lon)

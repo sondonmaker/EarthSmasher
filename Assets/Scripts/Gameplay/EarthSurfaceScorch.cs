@@ -386,9 +386,16 @@ public class EarthSurfaceScorch : MonoBehaviour
 
     /// <summary>
     /// 용암 원 가장자리에서 바깥으로 충격 크랙이 퍼짐.
-    /// startFrac = 크레이터 반경 대비 시작(보통 0.55~0.75), endMul = 바깥으로 몇 배까지.
     /// </summary>
     public void PaintShockCracks(Vector3 worldPoint, float craterRadiusNorm, float startFrac, float endMul, int branches, bool moltenCore)
+    {
+        PaintMoltenFissures(worldPoint, craterRadiusNorm, startFrac, endMul, branches);
+    }
+
+    /// <summary>
+    /// 레퍼런스형 용암 균열: 검정 가장자리 + 주황 + 노란 핵 (텍스처).
+    /// </summary>
+    public void PaintMoltenFissures(Vector3 worldPoint, float craterRadiusNorm, float startFrac, float endMul, int branches)
     {
         EnsureWorkingTexture();
         EnsureImpactTextures();
@@ -401,8 +408,68 @@ public class EarthSurfaceScorch : MonoBehaviour
         float craterPx = Mathf.Clamp(craterRadiusNorm * working.width * 0.72f, 22f, working.width * 0.22f);
         float startR = craterPx * Mathf.Clamp(startFrac, 0.3f, 0.95f);
         float endR = craterPx * Mathf.Clamp(endMul, 1.1f, 3.5f);
-        PaintDarkBranches(cx, cy, startR, endR, branches, moltenCore);
+        PaintMoltenBranches(cx, cy, startR, endR, branches);
         dirty = true;
+    }
+
+    void PaintMoltenBranches(int cx, int cy, float startR, float endR, int branches)
+    {
+        int w = working.width;
+        int h = working.height;
+        float aspect = h / (float)w;
+        branches = Mathf.Clamp(branches, 6, 28);
+        float baseAngle = Random.Range(0f, Mathf.PI * 2f);
+
+        Color32 edge = new Color32(10, 8, 7, 255);
+        Color32 orange = new Color32(255, 90, 18, 255);
+        Color32 core = new Color32(255, 220, 90, 255);
+
+        for (int b = 0; b < branches; b++)
+        {
+            float ang = baseAngle + (Mathf.PI * 2f * b / branches) + Random.Range(-0.3f, 0.3f);
+            float len = (endR - startR) * Random.Range(0.75f, 1.2f);
+            int steps = Mathf.Max(16, Mathf.RoundToInt(len));
+
+            float x = cx + Mathf.Cos(ang) * startR;
+            float y = cy + Mathf.Sin(ang) * startR * aspect;
+            float dir = ang + Random.Range(-0.12f, 0.12f);
+            bool fork = Random.value > 0.45f;
+            float forkAt = Random.Range(0.3f, 0.65f);
+
+            for (int s = 0; s < steps; s++)
+            {
+                float t = s / (float)steps;
+                dir += Random.Range(-0.2f, 0.2f);
+                if (fork && t > forkAt)
+                    dir += Random.Range(-0.5f, 0.5f);
+
+                float step = 0.85f + Random.Range(0f, 0.5f);
+                x += Mathf.Cos(dir) * step;
+                y += Mathf.Sin(dir) * step * aspect;
+
+                int ix = Mathf.RoundToInt(x);
+                int iy = Mathf.RoundToInt(y);
+                if (iy < 0 || iy >= h)
+                    break;
+                while (ix < 0) ix += w;
+                while (ix >= w) ix -= w;
+
+                float tip = 1f - t; // 용암 원 쪽이 더 굵고 밝음
+                int outer = tip > 0.55f ? 3 : (tip > 0.25f ? 2 : 1);
+                // 레이어: 검정 테두리 → 주황 → 노란 핵
+                StampCrack(ix, iy, outer, edge, 0.75f * tip + 0.2f);
+                StampCrack(ix, iy, Mathf.Max(0, outer - 1), orange, 0.85f * tip + 0.15f);
+                if (tip > 0.2f)
+                    StampCrack(ix, iy, 0, core, 0.55f * tip + 0.2f);
+
+                // 용암 텍스처 살짝 섞어 줄무늬 느낌
+                if (lavaColorPx != null && (s % 2 == 0))
+                {
+                    Color32 lava = Sample(lavaColorPx, lavaW, lavaH, ix * 0.01f, iy * 0.01f);
+                    StampCrack(ix, iy, 1, lava, 0.35f * tip);
+                }
+            }
+        }
     }
 
     bool TryImpactUv(Vector3 worldPoint, out int cx, out int cy, out float lat, out float lon)

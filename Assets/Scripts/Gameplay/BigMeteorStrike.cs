@@ -138,10 +138,9 @@ public class BigMeteorBody : MonoBehaviour
             ImpactCrater.Spawn(_earth.transform, _impact, _normal, 1.35f);
             var scorch = EarthSurfaceScorch.Ensure(_earth);
             if (scorch != null)
-            {
-                // 운석도 맞은 원 밖으로 크랙 한 번
-                scorch.PaintShockCracks(_impact, 0.1f, 0.65f, 2.2f, 12, true);
-            }
+                scorch.PaintMoltenFissures(_impact, 0.1f, 0.65f, 2.3f, 12);
+            // 짧은 발광 리본 웨이브 1회
+            _earth.StartCoroutine(MoltenCrackFx.Play(_earth, _impact, 0.1f));
         }
 
         _onDone?.Invoke();
