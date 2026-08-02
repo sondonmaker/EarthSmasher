@@ -151,11 +151,17 @@ public class WorldStatusHud : MonoBehaviour
         x += 16f;
 
         // Center icons
-        x = DrawIconButton(x, y, rowH, "X", "Disaster", () =>
+        x = DrawIconButton(x, y, rowH, "X", "Weapons", () =>
         {
-            var panel = FindObjectOfType<EarthControlPanel>();
-            if (panel != null)
-                panel.OpenTab(EarthControlPanel.Tab.Disaster);
+            var rail = FindObjectOfType<WeaponRailPanel>();
+            if (rail != null)
+                rail.OpenCategory(1);
+            else
+            {
+                var panel = FindObjectOfType<EarthControlPanel>();
+                if (panel != null)
+                    panel.OpenTab(EarthControlPanel.Tab.Disaster);
+            }
         });
         x = DrawIconButton(x, y, rowH, "O", "Recenter", () =>
         {

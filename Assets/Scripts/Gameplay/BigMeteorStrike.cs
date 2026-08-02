@@ -30,10 +30,29 @@ public class BigMeteorStrike : MonoBehaviour
         if (earth == null) earth = FindObjectOfType<EarthPlanet>();
     }
 
+    public void FireRandom()
+    {
+        if (earth == null)
+            earth = FindObjectOfType<EarthPlanet>();
+        if (earth == null || Time.time < _readyAt)
+            return;
+        if (cam == null)
+            cam = Camera.main;
+
+        Vector3 dir = cam != null
+            ? (cam.transform.position - earth.transform.position).normalized
+            : Random.onUnitSphere;
+        if (dir.sqrMagnitude < 1e-6f)
+            dir = Random.onUnitSphere;
+        Vector3 impact = earth.transform.position + dir * earth.Radius;
+        LaunchBig(impact, dir);
+    }
+
     void Update()
     {
         if (earth == null) return;
         if (EarthLayerToolbar.BlocksGameplayInput || ZoomUiBlocker.BlocksGameplay || WorldStatusHud.BlocksGameplay) return;
+        if (WeaponRailPanel.BlocksGameplay) return;
         if (DisasterUiGate.ModalOpen) return;
         if (Time.time < _readyAt) return;
         if (!WantsBigStrike()) return;

@@ -199,7 +199,8 @@ public class OrbitCamera : MonoBehaviour
         // 사이드/HUD/줌 UI 위에 있을 때만 막음. 재해 연출·리포트 열려 있어도 카메라 자유.
         bool uiBlocks = EarthLayerToolbar.BlocksGameplayInput
             || ZoomUiBlocker.BlocksGameplay
-            || WorldStatusHud.BlocksGameplay;
+            || WorldStatusHud.BlocksGameplay
+            || WeaponRailPanel.BlocksGameplay;
 
         // 드래그/줌이면 자동 포커스·추적 즉시 끊고 같은 프레임에 조작
         if (!uiBlocks && WantsOrbitInterrupt())

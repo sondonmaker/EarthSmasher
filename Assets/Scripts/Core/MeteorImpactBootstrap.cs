@@ -98,6 +98,9 @@ public class MeteorImpactBootstrap : MonoBehaviour
             moon = new GameObject("MoonImpactSystem").AddComponent<MoonImpactSystem>();
         moon.Configure(earth);
 
+        if (FindObjectOfType<WeaponRailPanel>() == null)
+            new GameObject("WeaponRailPanel").AddComponent<WeaponRailPanel>();
+
         if (FindObjectOfType<EarthControlPanel>() == null)
         {
             var body = earth.GetComponent<EarthBodyData>();

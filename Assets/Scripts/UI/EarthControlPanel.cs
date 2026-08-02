@@ -281,6 +281,17 @@ public class EarthControlPanel : MonoBehaviour
 
     void DrawDisaster()
     {
+        GUILayout.Label("Weapons moved to the right icon rail.\n(Impact / War / Quake / Moon / Meme)", _hint);
+        GUILayout.Space(8);
+        if (GUILayout.Button("Open Weapon Rail", GUILayout.Height(36)))
+        {
+            var rail = FindObjectOfType<WeaponRailPanel>();
+            if (rail != null)
+                rail.OpenCategory(1);
+            expanded = false;
+        }
+        GUILayout.Space(12);
+
         DrawDisasterItem(0, "$", "Planetary Collision", "200", "sci", false,
             "Cost 200 science. Crash another planet into Earth.",
             () => ExecuteStub("Planetary Collision"));
