@@ -24,24 +24,26 @@ public class MoltenCrackFx : MonoBehaviour
     {
         var scorch = EarthSurfaceScorch.Ensure(GetComponent<EarthPlanet>());
         float R = GetComponent<EarthPlanet>().Radius;
-        Vector3 center = transform.position;
-        Vector3 n = (worldImpact - center).normalized;
+        // 지구가 자전해도 충돌점에 붙도록 — 반드시 로컬 방향 사용
+        Vector3 localN = transform.InverseTransformPoint(worldImpact);
+        if (localN.sqrMagnitude < 1e-8f)
+            yield break;
+        localN.Normalize();
 
         // 웨이브마다 더 멀리 갈라짐
-        yield return SpawnWave(scorch, worldImpact, n, center, R, craterRadiusNorm, 0.6f, 1.45f, 12, true);
+        yield return SpawnWave(scorch, worldImpact, localN, R, craterRadiusNorm, 0.6f, 1.45f, 12, true);
         yield return Wait(0.22f);
-        yield return SpawnWave(scorch, worldImpact, n, center, R, craterRadiusNorm, 0.7f, 2.15f, 16, true);
+        yield return SpawnWave(scorch, worldImpact, localN, R, craterRadiusNorm, 0.7f, 2.15f, 16, true);
         CameraShake.Shake(0.5f, 0.5f);
         yield return Wait(0.26f);
-        yield return SpawnWave(scorch, worldImpact, n, center, R, craterRadiusNorm, 0.82f, 2.85f, 14, false);
+        yield return SpawnWave(scorch, worldImpact, localN, R, craterRadiusNorm, 0.82f, 2.85f, 14, false);
         yield return Wait(0.2f);
     }
 
     IEnumerator SpawnWave(
         EarthSurfaceScorch scorch,
         Vector3 worldImpact,
-        Vector3 impactN,
-        Vector3 center,
+        Vector3 localImpactN,
         float R,
         float craterRadiusNorm,
         float startFrac,
@@ -52,8 +54,8 @@ public class MoltenCrackFx : MonoBehaviour
         if (scorch != null)
             scorch.PaintMoltenFissures(worldImpact, craterRadiusNorm, startFrac, endMul, branches);
 
-        // 3D 발광 리본 (레퍼런스처럼 빛나 보이게)
-        var paths = BuildBranchPaths(impactN, craterRadiusNorm, startFrac, endMul, branches);
+        // 3D 발광 리본 — 로컬 단위구 방향 (Earth 자식)
+        var paths = BuildBranchPaths(localImpactN, craterRadiusNorm, startFrac, endMul, branches);
         var root = new GameObject("MoltenCrackWave");
         root.transform.SetParent(transform, false);
 

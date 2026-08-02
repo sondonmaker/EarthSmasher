@@ -150,18 +150,16 @@ public class EarthCraterDeform : MonoBehaviour
         var norms = new Vector3[vertCount];
         var uvs = new Vector2[vertCount];
 
+        // EarthGeo / 텍스처 페인팅과 동일한 위경도→방향 규약
         int i = 0;
         for (int y = 0; y <= latSeg; y++)
         {
             float v = y / (float)latSeg;
-            float pitch = (v - 0.5f) * Mathf.PI;
-            float cy = Mathf.Sin(pitch);
-            float cr = Mathf.Cos(pitch);
             for (int x = 0; x <= lonSeg; x++)
             {
                 float u = x / (float)lonSeg;
-                float yaw = u * Mathf.PI * 2f;
-                var p = new Vector3(Mathf.Cos(yaw) * cr, cy, Mathf.Sin(yaw) * cr);
+                EarthGeo.UvToLatLon(u, v, out float lat, out float lon);
+                Vector3 p = EarthGeo.LatLonToDirection(lat, lon);
                 verts[i] = p * 0.5f;
                 norms[i] = p;
                 uvs[i] = new Vector2(u, v);

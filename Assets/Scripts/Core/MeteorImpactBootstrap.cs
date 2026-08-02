@@ -178,6 +178,10 @@ public class MeteorImpactBootstrap : MonoBehaviour
         planet.SetVisualRefs(rend, core.transform);
         earthGo.AddComponent<EarthSpin>().SetSpeed(7.5f);
 
+        // Unity 기본 Sphere UV ≠ EarthGeo — 충돌/크랙 좌표가 반대편으로 가는 원인.
+        // 시작부터 EarthGeo 규약 메시로 맞춰 텍스처·용암·균열이 같은 지점에 붙게 함.
+        EarthCraterDeform.Ensure(planet);
+
         var body = earthGo.AddComponent<EarthBodyData>();
 
         var layers = earthGo.AddComponent<EarthLayerController>();
