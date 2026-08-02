@@ -45,19 +45,6 @@ public class ImpactHud : MonoBehaviour
 
     void OnGUI()
     {
-        EnsureStyles();
-        float w = 360f;
-        float x = Screen.width - w - 16f;
-        float y = 58f; // 상단 바 아래
-        float h = 28f;
-
-        string target = _targeting ? "TARGET: EARTH" : "TARGET: ---";
-        string impact = (!_targeting || _impactSeconds <= 0.001f)
-            ? "IMPACT IN: --"
-            : $"IMPACT IN: {_impactSeconds:0.0} SEC";
-
-        GUI.Label(new Rect(x, y, w, h), target, _style);
-        GUI.Label(new Rect(x, y + 28f, w, h), impact, _style);
-        GUI.Label(new Rect(x, y + 56f, w, h), $"HITS: {_impactCount}", _accentStyle);
+        // 오른쪽 무기 레일과 겹치던 TARGET/IMPACT/HITS 표시 제거
     }
 }
