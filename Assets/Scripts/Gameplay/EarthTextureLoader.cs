@@ -61,9 +61,9 @@ public static class EarthTextureLoader
 
     public static Material CreateCloudMaterial()
     {
-        // 레퍼런스: 소용돌이·얇은 베일 유지, 코어만 밝고 선명
-        return BuildCloudMaterial(0.78f, 0.95f, 0.22f, 1.55f, Vector2.zero, Vector2.one,
-            new Color(0.98f, 0.99f, 1f, 1f));
+        // 덩어리 커버리지↓ — 진한 부분만 남기고 중간 회색 구름은 컷
+        return BuildCloudMaterial(0.58f, 1.35f, 0.42f, 1.85f, Vector2.zero, Vector2.one,
+            new Color(0.97f, 0.98f, 1f, 1f));
     }
 
     /// <summary>구름 아래 부드러운 그림자 — 표면 깊이감.</summary>
@@ -75,9 +75,9 @@ public static class EarthTextureLoader
 
         var mat = new Material(shader);
         mat.mainTexture = Clouds;
-        mat.SetFloat("_Strength", 0.48f);
-        mat.SetFloat("_Threshold", 0.2f);
-        mat.SetFloat("_Softness", 1.15f);
+        mat.SetFloat("_Strength", 0.28f);
+        mat.SetFloat("_Threshold", 0.4f);
+        mat.SetFloat("_Softness", 1.35f);
         return mat;
     }
 

@@ -78,23 +78,22 @@ Shader "EarthSmasher/CloudsSoft"
                 density = saturate(pow(density, _Softness));
                 density = saturate(pow(density, 1.0 / max(0.2, _Contrast)));
 
-                // 두꺼운 코어 = 밝고 불투명 / 가장자리 = 반투명 베일
-                float core = saturate(smoothstep(0.2, 0.82, density));
-                float veil = saturate(density * (1.0 - core * 0.35));
+                // 덩어리(코어)는 드물게, 얇은 띠 위주
+                float core = saturate(smoothstep(0.55, 0.92, density));
+                float veil = saturate(pow(density, 1.25));
 
                 float3 n = normalize(i.worldNormal);
                 float3 lightDir = normalize(_WorldSpaceLightPos0.xyz);
                 float ndotl = saturate(dot(n, lightDir) * (1.0 - _LightWrap) + _LightWrap);
 
-                // 레퍼런스: 밝은 흰 덩어리 + 살짝 그늘져 볼륨감
-                float shade = lerp(1.0 - _Volume * 0.55, 1.0, ndotl);
-                float3 bright = _Color.rgb * float3(1.0, 1.0, 1.0);
-                float3 soft = _Color.rgb * float3(0.78, 0.82, 0.9);
+                float shade = lerp(1.0 - _Volume * 0.4, 1.0, ndotl);
+                float3 bright = _Color.rgb;
+                float3 soft = _Color.rgb * float3(0.82, 0.86, 0.92);
                 float3 dayCol = lerp(soft, bright, core) * shade;
                 float3 nightCol = _Color.rgb * float3(0.35, 0.4, 0.5);
                 float3 col = lerp(nightCol, dayCol, ndotl);
 
-                float alpha = saturate((veil * 0.55 + core * 0.95) * _Opacity * _Color.a);
+                float alpha = saturate((veil * 0.4 + core * 0.75) * _Opacity * _Color.a);
                 return float4(col, alpha);
             }
             ENDCG
