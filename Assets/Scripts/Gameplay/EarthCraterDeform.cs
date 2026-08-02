@@ -67,6 +67,11 @@ public class EarthCraterDeform : MonoBehaviour
     /// <param name="depthNorm">지구 반지름 대비 깊이 (클수록 깊게 파임)</param>
     public void Stamp(Vector3 worldPoint, float radiusNorm, float depthNorm)
     {
+        StampIrregular(worldPoint, radiusNorm, depthNorm, worldPoint.GetHashCode());
+    }
+
+    public void StampIrregular(Vector3 worldPoint, float radiusNorm, float depthNorm, int seed)
+    {
         EnsureReady();
         if (workingCrust == null)
             return;
@@ -80,14 +85,33 @@ public class EarthCraterDeform : MonoBehaviour
         float depth = Mathf.Clamp(depthNorm, 0.02f, 0.12f);
         float rimH = depth * 0.55f;
 
-        DeformMesh(workingCrust, dir, craterAngle, depth, rimH);
-        // 바다도 같이 눌러 파란 속살이 안 보이게 + 용암 캡이 보이게
+        DeformMeshIrregular(workingCrust, dir, craterAngle, depth, rimH, seed);
         if (workingOcean != null)
-            DeformMesh(workingOcean, dir, craterAngle * 1.02f, depth * 1.05f, rimH * 0.4f);
+            DeformMeshIrregular(workingOcean, dir, craterAngle * 1.02f, depth * 1.05f, rimH * 0.4f, seed ^ 0x5f3759df);
     }
 
-    static void DeformMesh(Mesh mesh, Vector3 impactDir, float craterAngle, float depthFrac, float rimFrac)
+    static void DeformMeshIrregular(Mesh mesh, Vector3 impactDir, float craterAngle, float depthFrac, float rimFrac, int seed)
     {
+        var rng = new System.Random(seed);
+        float stretchA = Mathf.Lerp(0.7f, 1.3f, (float)rng.NextDouble());
+        float stretchB = Mathf.Lerp(0.75f, 1.25f, (float)rng.NextDouble());
+        float rot = (float)(rng.NextDouble() * Mathf.PI * 2.0);
+        float n1 = Mathf.Lerp(0.1f, 0.26f, (float)rng.NextDouble());
+        float n2 = Mathf.Lerp(0.05f, 0.14f, (float)rng.NextDouble());
+        float p1 = (float)(rng.NextDouble() * Mathf.PI * 2.0);
+        float p2 = (float)(rng.NextDouble() * Mathf.PI * 2.0);
+        int h1 = 2 + rng.Next(0, 3);
+        int h2 = 5 + rng.Next(0, 4);
+        float depthBias = Mathf.Lerp(0.85f, 1.2f, (float)rng.NextDouble());
+
+        Vector3 tAxis = Vector3.Cross(impactDir, Vector3.up);
+        if (tAxis.sqrMagnitude < 1e-4f)
+            tAxis = Vector3.Cross(impactDir, Vector3.right);
+        tAxis.Normalize();
+        Vector3 bAxis = Vector3.Cross(impactDir, tAxis).normalized;
+        Vector3 axisA = (tAxis * Mathf.Cos(rot) + bAxis * Mathf.Sin(rot)).normalized;
+        Vector3 axisB = (bAxis * Mathf.Cos(rot) - tAxis * Mathf.Sin(rot)).normalized;
+
         var verts = mesh.vertices;
         bool changed = false;
 
@@ -101,27 +125,43 @@ public class EarthCraterDeform : MonoBehaviour
             Vector3 n = v / len;
             float dot = Mathf.Clamp(Vector3.Dot(n, impactDir), -1f, 1f);
             float ang = Mathf.Acos(dot);
-            float t = ang / craterAngle;
-            if (t > 1.4f)
+
+            // 충격점 기준 방위각 → 타원/노이즈로 유효 반경 변형
+            Vector3 tangential = n - impactDir * dot;
+            float phi = 0f;
+            if (tangential.sqrMagnitude > 1e-8f)
+            {
+                tangential.Normalize();
+                phi = Mathf.Atan2(Vector3.Dot(tangential, axisB), Vector3.Dot(tangential, axisA));
+            }
+
+            float ellipse = stretchA * Mathf.Cos(phi) * Mathf.Cos(phi)
+                          + stretchB * Mathf.Sin(phi) * Mathf.Sin(phi);
+            float wave = 1f + n1 * Mathf.Sin(h1 * phi + p1) + n2 * Mathf.Sin(h2 * phi + p2);
+            float localAngle = craterAngle * Mathf.Clamp(ellipse * wave, 0.55f, 1.5f);
+
+            float t = ang / Mathf.Max(1e-4f, localAngle);
+            if (t > 1.45f)
                 continue;
 
             float radialDelta = 0f;
             if (t <= 1f)
             {
-                // 깊은 분지 (중앙이 강하게 들어감)
                 float bowl = 1f - t;
-                bowl = bowl * bowl * (3f - 2f * bowl); // smoothstep-ish
-                radialDelta -= depthFrac * len * Mathf.Pow(bowl, 0.85f);
+                bowl = bowl * bowl * (3f - 2f * bowl);
+                // 한쪽이 더 깊은 비대칭 분지
+                float asym = 1f + 0.18f * Mathf.Sin(phi + p1);
+                radialDelta -= depthFrac * len * Mathf.Pow(bowl, 0.85f) * depthBias * asym;
 
-                // 테두리 융기 — 실루엣용
-                float rim = Mathf.Exp(-Mathf.Pow((t - 0.88f) * 5.5f, 2f));
-                radialDelta += rimFrac * len * rim;
+                float rimCenter = 0.82f + 0.1f * Mathf.Sin(phi * 3f + p2);
+                float rim = Mathf.Exp(-Mathf.Pow((t - rimCenter) * 5.2f, 2f));
+                radialDelta += rimFrac * len * rim * (0.85f + 0.3f * Mathf.Sin(phi * 2f + p1));
             }
             else
             {
-                float u = 1f - (t - 1f) / 0.4f;
+                float u = 1f - (t - 1f) / 0.45f;
                 if (u > 0f)
-                    radialDelta += rimFrac * len * 0.35f * u * u;
+                    radialDelta += rimFrac * len * 0.3f * u * u * (0.7f + 0.4f * Mathf.Sin(phi * 4f + p2));
             }
 
             if (Mathf.Abs(radialDelta) < 1e-7f)

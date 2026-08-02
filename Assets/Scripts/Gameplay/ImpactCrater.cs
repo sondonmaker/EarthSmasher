@@ -2,7 +2,7 @@ using UnityEngine;
 using UnityEngine.Rendering;
 
 /// <summary>
-/// 충돌: 움푹 파인 지형 + 맞은 면은 AmbientCG 용암으로 둥글게 채움.
+/// 충돌: 불규칙한 크레이터 지형 + 자연스러운 용암 흉터 (완벽한 원 금지).
 /// </summary>
 public class ImpactCrater : MonoBehaviour
 {
@@ -33,24 +33,33 @@ public class ImpactCrater : MonoBehaviour
             return;
 
         normal = normal.normalized;
+        int seed = HashSeed(worldPoint, radiusNorm);
 
-        // 움푹 파기 (지각+바다 같이 — 파란 속살 안 보이게)
         var deform = EarthCraterDeform.Ensure(earth);
         if (deform != null)
-            deform.Stamp(worldPoint, radiusNorm, huge ? 0.09f : 0.045f);
+            deform.StampIrregular(worldPoint, radiusNorm, huge ? 0.09f : 0.045f, seed);
 
-        // 맞은 부분 = 구면에 붙는 둥근 용암 패치
-        SpawnLavaCap(earth.transform, normal, radiusNorm, huge);
+        SpawnLavaScar(earth.transform, normal, radiusNorm, huge, seed);
 
         var scorch = EarthSurfaceScorch.Ensure(earth);
         if (scorch != null)
-            scorch.PaintImpactCrater(worldPoint, radiusNorm * 1.15f);
+            scorch.PaintImpactCrater(worldPoint, radiusNorm * 1.15f, seed);
     }
 
-    /// <summary>
-    /// 지구 곡면을 따라가는 원형 용암 캡 (평평한 원판 클리핑 없음).
-    /// </summary>
-    static void SpawnLavaCap(Transform earth, Vector3 normal, float radiusNorm, bool huge)
+    static int HashSeed(Vector3 p, float r)
+    {
+        unchecked
+        {
+            int h = p.x.GetHashCode();
+            h = (h * 397) ^ p.y.GetHashCode();
+            h = (h * 397) ^ p.z.GetHashCode();
+            h = (h * 397) ^ r.GetHashCode();
+            return h == 0 ? 17 : h;
+        }
+    }
+
+    /// <summary>구면 위 불규칙 용암 흉터 — 타원 + 들쭉날쭉한 가장자리.</summary>
+    static void SpawnLavaScar(Transform earth, Vector3 normal, float radiusNorm, bool huge, int seed)
     {
         Vector3 localN = earth.InverseTransformDirection(normal).normalized;
         if (localN.sqrMagnitude < 1e-6f)
@@ -66,8 +75,7 @@ public class ImpactCrater : MonoBehaviour
         go.transform.localScale = Vector3.one;
 
         var mf = go.AddComponent<MeshFilter>();
-        // 분지 안쪽에 살짝 들어가게 + 테두리는 표면 근처
-        mf.sharedMesh = BuildSphericalCap(40, 14, localN, meshR, ang, huge ? 0.012f : 0.008f);
+        mf.sharedMesh = BuildIrregularScar(48, 16, localN, meshR, ang, huge ? 0.012f : 0.008f, seed);
 
         var mr = go.AddComponent<MeshRenderer>();
         mr.sharedMaterial = CreateLavaFillMaterial(huge);
@@ -76,28 +84,68 @@ public class ImpactCrater : MonoBehaviour
     }
 
     /// <summary>
-    /// impactDir 주변 원뿔 각도의 구면 캡. bowlInset만큼 중심으로 갈수록 더 들어감.
+    /// 타원형 + 각도별 반경 노이즈로 들쭉날쭉한 구면 흉터.
     /// </summary>
-    static Mesh BuildSphericalCap(int seg, int rings, Vector3 impactDir, float radius, float angleRad, float bowlInset)
+    static Mesh BuildIrregularScar(int seg, int rings, Vector3 impactDir, float radius, float angleRad, float bowlInset, int seed)
     {
-        seg = Mathf.Clamp(seg, 16, 72);
-        rings = Mathf.Clamp(rings, 6, 24);
+        seg = Mathf.Clamp(seg, 24, 80);
+        rings = Mathf.Clamp(rings, 8, 28);
         impactDir.Normalize();
 
-        // basis
+        var rng = new System.Random(seed);
+        float stretchA = Mathf.Lerp(0.72f, 1.28f, (float)rng.NextDouble());
+        float stretchB = Mathf.Lerp(0.75f, 1.22f, (float)rng.NextDouble());
+        // 한쪽으로 더 길게 (충돌 각/분출 방향 느낌)
+        if (rng.NextDouble() > 0.5)
+            stretchA *= 1.15f;
+        else
+            stretchB *= 1.12f;
+
+        float rot = (float)(rng.NextDouble() * Mathf.PI * 2.0);
+        float n1 = Mathf.Lerp(0.12f, 0.28f, (float)rng.NextDouble());
+        float n2 = Mathf.Lerp(0.06f, 0.16f, (float)rng.NextDouble());
+        float n3 = Mathf.Lerp(0.03f, 0.1f, (float)rng.NextDouble());
+        float p1 = (float)(rng.NextDouble() * Mathf.PI * 2.0);
+        float p2 = (float)(rng.NextDouble() * Mathf.PI * 2.0);
+        float p3 = (float)(rng.NextDouble() * Mathf.PI * 2.0);
+        int h1 = 2 + rng.Next(0, 3);
+        int h2 = 5 + rng.Next(0, 4);
+        int h3 = 9 + rng.Next(0, 6);
+
+        // 바깥 들쭉날쭉 — 섹터별 추가 지터
+        var edgeJitter = new float[seg + 1];
+        for (int s = 0; s <= seg; s++)
+            edgeJitter[s] = Mathf.Lerp(0.82f, 1.22f, (float)rng.NextDouble());
+        // 이웃과 살짝 블렌드해서 너무 스파이크 나지 않게
+        for (int pass = 0; pass < 2; pass++)
+        {
+            var tmp = (float[])edgeJitter.Clone();
+            for (int s = 0; s < seg; s++)
+            {
+                float a = tmp[(s + seg - 1) % seg];
+                float b = tmp[s];
+                float c = tmp[(s + 1) % seg];
+                edgeJitter[s] = b * 0.5f + a * 0.25f + c * 0.25f;
+            }
+            edgeJitter[seg] = edgeJitter[0];
+        }
+
         Vector3 tangent = Vector3.Cross(impactDir, Vector3.up);
         if (tangent.sqrMagnitude < 1e-4f)
             tangent = Vector3.Cross(impactDir, Vector3.right);
         tangent.Normalize();
         Vector3 bitangent = Vector3.Cross(impactDir, tangent).normalized;
 
+        // 회전된 타원 축
+        Vector3 axisA = (tangent * Mathf.Cos(rot) + bitangent * Mathf.Sin(rot)).normalized;
+        Vector3 axisB = (bitangent * Mathf.Cos(rot) - tangent * Mathf.Sin(rot)).normalized;
+
         int vertCount = 1 + rings * (seg + 1);
         var verts = new Vector3[vertCount];
         var norms = new Vector3[vertCount];
         var uvs = new Vector2[vertCount];
 
-        // center
-        float centerR = radius - bowlInset;
+        float centerR = radius - bowlInset * RandomRange(rng, 0.85f, 1.25f);
         verts[0] = impactDir * centerR;
         norms[0] = impactDir;
         uvs[0] = new Vector2(0.5f, 0.5f);
@@ -106,31 +154,43 @@ public class ImpactCrater : MonoBehaviour
         for (int r = 1; r <= rings; r++)
         {
             float rt = r / (float)rings;
-            float a = angleRad * rt;
-            // 가장자리는 덜 파고, 중심은 더 팜
-            float inset = bowlInset * (1f - rt * rt);
-            float rr = radius - inset;
-            float ringSin = Mathf.Sin(a);
-            float ringCos = Mathf.Cos(a);
+            bool outer = r == rings;
 
             for (int s = 0; s <= seg; s++)
             {
                 float u = s / (float)seg;
                 float phi = u * Mathf.PI * 2f;
+
+                float ellipse = stretchA * Mathf.Cos(phi) * Mathf.Cos(phi)
+                              + stretchB * Mathf.Sin(phi) * Mathf.Sin(phi);
+                float wave = 1f
+                    + n1 * Mathf.Sin(h1 * phi + p1)
+                    + n2 * Mathf.Sin(h2 * phi + p2)
+                    + n3 * Mathf.Sin(h3 * phi + p3);
+                float edge = outer ? edgeJitter[s] : Mathf.Lerp(1f, edgeJitter[s], rt * rt);
+                float radMul = Mathf.Clamp(ellipse * wave * edge, 0.55f, 1.55f);
+
+                float a = angleRad * rt * radMul;
+                float inset = bowlInset * (1f - rt * rt) * RandomRange(rng, 0.9f, 1.15f);
+                // 중심이 살짝 비대칭으로 더 깊게
+                float asym = 1f + 0.12f * Mathf.Sin(phi + p1) * (1f - rt);
+                float rr = radius - inset * asym;
+                float ringSin = Mathf.Sin(a);
+                float ringCos = Mathf.Cos(a);
+
                 Vector3 dir = (impactDir * ringCos
-                    + tangent * (Mathf.Cos(phi) * ringSin)
-                    + bitangent * (Mathf.Sin(phi) * ringSin)).normalized;
+                    + axisA * (Mathf.Cos(phi) * ringSin)
+                    + axisB * (Mathf.Sin(phi) * ringSin)).normalized;
                 verts[vi] = dir * rr;
                 norms[vi] = dir;
-                // 원형 UV — 용암 텍스처가 둥글게
-                float ru = 0.5f + 0.5f * rt * Mathf.Cos(phi);
-                float rv = 0.5f + 0.5f * rt * Mathf.Sin(phi);
+
+                float ru = 0.5f + 0.5f * rt * radMul * Mathf.Cos(phi);
+                float rv = 0.5f + 0.5f * rt * radMul * Mathf.Sin(phi);
                 uvs[vi] = new Vector2(ru, rv);
                 vi++;
             }
         }
 
-        // tris: center fan + rings
         var tris = new int[seg * 3 + (rings - 1) * seg * 6];
         int ti = 0;
         for (int s = 0; s < seg; s++)
@@ -158,14 +218,19 @@ public class ImpactCrater : MonoBehaviour
             }
         }
 
-        var mesh = new Mesh { name = "LavaSphericalCap" };
+        var mesh = new Mesh { name = "LavaIrregularScar" };
         mesh.vertices = verts;
         mesh.normals = norms;
         mesh.uv = uvs;
         mesh.triangles = tris;
         mesh.RecalculateBounds();
-        // 바깥에서 보이도록 법선 지구 바깥쪽 유지 (이미 dir)
+        mesh.RecalculateNormals();
         return mesh;
+    }
+
+    static float RandomRange(System.Random rng, float a, float b)
+    {
+        return Mathf.Lerp(a, b, (float)rng.NextDouble());
     }
 
     static Material CreateLavaFillMaterial(bool huge)
@@ -183,6 +248,11 @@ public class ImpactCrater : MonoBehaviour
             mat.mainTexture = lava;
             if (mat.HasProperty("_BaseMap"))
                 mat.SetTexture("_BaseMap", lava);
+            // 타일 깨서 원형 패턴 느낌 줄이기
+            mat.mainTextureScale = new Vector2(
+                Random.Range(1.6f, 2.8f),
+                Random.Range(1.6f, 2.8f));
+            mat.mainTextureOffset = new Vector2(Random.value, Random.value);
         }
 
         Color tint = new Color(1f, 0.45f, 0.2f);
@@ -194,7 +264,6 @@ public class ImpactCrater : MonoBehaviour
         mat.EnableKeyword("_EMISSION");
         if (emit != null && mat.HasProperty("_EmissionMap"))
             mat.SetTexture("_EmissionMap", emit);
-        // 스크린샷처럼 붉게 빛나는 맞은 면
         mat.SetColor("_EmissionColor", new Color(1.6f, 0.35f, 0.06f) * (huge ? 2.0f : 1.25f));
 
         if (mat.HasProperty("_Glossiness"))

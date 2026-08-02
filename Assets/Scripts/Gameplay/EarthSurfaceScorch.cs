@@ -258,9 +258,9 @@ public class EarthSurfaceScorch : MonoBehaviour
     }
 
     /// <summary>
-    /// AmbientCG 용암/암석 텍스처로 부드러운 크레이터 자국 (낙서 선 없음).
+    /// AmbientCG 용암/암석 — 타원+노이즈로 불규칙한 크레이터 자국.
     /// </summary>
-    public void PaintImpactCrater(Vector3 worldPoint, float radiusNorm = 0.12f)
+    public void PaintImpactCrater(Vector3 worldPoint, float radiusNorm = 0.12f, int seed = 0)
     {
         EnsureWorkingTexture();
         EnsureImpactTextures();
@@ -279,13 +279,29 @@ public class EarthSurfaceScorch : MonoBehaviour
         int cx = Mathf.Clamp(Mathf.RoundToInt(u * (w - 1)), 0, w - 1);
         int cy = Mathf.Clamp(Mathf.RoundToInt(v * (h - 1)), 0, h - 1);
 
+        if (seed == 0)
+            seed = (cx * 73856093) ^ (cy * 19349663) ^ radiusNorm.GetHashCode();
+        var rng = new System.Random(seed);
+
         float radiusPx = Mathf.Clamp(radiusNorm * w * 0.72f, 22f, w * 0.22f);
-        int r = Mathf.CeilToInt(radiusPx * 1.4f);
-        float invR = 1f / Mathf.Max(0.001f, radiusPx);
-        float uvScale = Random.Range(0.35f, 0.7f);
-        float uvRot = Random.Range(0f, Mathf.PI * 2f);
-        float cosR = Mathf.Cos(uvRot);
-        float sinR = Mathf.Sin(uvRot);
+        float stretchX = Mathf.Lerp(0.7f, 1.35f, (float)rng.NextDouble());
+        float stretchY = Mathf.Lerp(0.72f, 1.3f, (float)rng.NextDouble());
+        float rot = (float)(rng.NextDouble() * Mathf.PI * 2.0);
+        float cosR = Mathf.Cos(rot);
+        float sinR = Mathf.Sin(rot);
+        float n1 = Mathf.Lerp(0.12f, 0.3f, (float)rng.NextDouble());
+        float n2 = Mathf.Lerp(0.05f, 0.16f, (float)rng.NextDouble());
+        float p1 = (float)(rng.NextDouble() * Mathf.PI * 2.0);
+        float p2 = (float)(rng.NextDouble() * Mathf.PI * 2.0);
+        int h1 = 2 + rng.Next(0, 3);
+        int h2 = 5 + rng.Next(0, 5);
+        float uvScale = Mathf.Lerp(0.4f, 0.85f, (float)rng.NextDouble());
+        float uvRot = (float)(rng.NextDouble() * Mathf.PI * 2.0);
+        float cosU = Mathf.Cos(uvRot);
+        float sinU = Mathf.Sin(uvRot);
+
+        int r = Mathf.CeilToInt(radiusPx * 1.55f * Mathf.Max(stretchX, stretchY));
+        float aspect = h / (float)Mathf.Max(1, w);
 
         for (int dy = -r; dy <= r; dy++)
         {
@@ -294,28 +310,37 @@ public class EarthSurfaceScorch : MonoBehaviour
                 continue;
             for (int dx = -r; dx <= r; dx++)
             {
-                float dist = Mathf.Sqrt(dx * dx + dy * dy) * invR;
-                if (dist > 1.4f)
+                // 회전+타원 거리
+                float rx = (dx * cosR + dy * sinR) / stretchX;
+                float ry = (-dx * sinR + dy * cosR) / (stretchY * Mathf.Max(0.35f, aspect * 2f));
+                float ang = Mathf.Atan2(ry, rx);
+                float edgeMul = 1f
+                    + n1 * Mathf.Sin(h1 * ang + p1)
+                    + n2 * Mathf.Sin(h2 * ang + p2);
+                float dist = Mathf.Sqrt(rx * rx + ry * ry) / Mathf.Max(0.001f, radiusPx * edgeMul);
+                if (dist > 1.35f)
                     continue;
 
                 int x = cx + dx;
                 while (x < 0) x += w;
                 while (x >= w) x -= w;
 
-                // 원형 소프트 마스크
                 float mask;
-                if (dist < 0.55f)
-                    mask = 0.92f;
-                else if (dist < 0.85f)
-                    mask = Mathf.Lerp(0.92f, 0.55f, (dist - 0.55f) / 0.3f);
+                if (dist < 0.45f)
+                    mask = 0.95f;
+                else if (dist < 0.78f)
+                    mask = Mathf.Lerp(0.95f, 0.5f, (dist - 0.45f) / 0.33f);
                 else
-                    mask = Mathf.SmoothStep(1f, 0f, (dist - 0.85f) / 0.55f) * 0.55f;
+                    mask = Mathf.SmoothStep(1f, 0f, (dist - 0.78f) / 0.57f) * 0.5f;
 
+                // 가장자리 깨짐 — 들쭉날쭉 알파
+                float ragged = 0.75f + 0.25f * Mathf.Sin(ang * 11f + p2 + dist * 6f);
+                mask *= Mathf.Lerp(0.55f, 1f, ragged);
                 if (mask < 0.02f)
                     continue;
 
-                float lx = (dx * cosR - dy * sinR) * uvScale / radiusPx;
-                float ly = (dx * sinR + dy * cosR) * uvScale / radiusPx;
+                float lx = (dx * cosU - dy * sinU) * uvScale / radiusPx;
+                float ly = (dx * sinU + dy * cosU) * uvScale / radiusPx;
                 float su = Mathf.Abs(lx) + 0.5f;
                 float sv = Mathf.Abs(ly) + 0.5f;
 
@@ -323,18 +348,16 @@ public class EarthSurfaceScorch : MonoBehaviour
                 Color32 lava = Sample(lavaColorPx, lavaW, lavaH, su * 1.3f, sv * 1.3f);
                 Color32 emit = Sample(lavaEmitPx, lavaW, lavaH, su * 1.3f, sv * 1.3f);
 
-                // 중심=어두운 암석+약한 용암, 링=용암, 바깥=재
-                Color32 target;
-                // 맞은 면 전체 = 붉은 용암 텍스처 (스크린샷 느낌)
                 var hot = new Color32(
                     (byte)Mathf.Min(255, (lava.r * 2 + emit.r) / 2),
                     (byte)Mathf.Min(255, (lava.g + emit.g / 2) / 2),
                     (byte)Mathf.Min(255, lava.b / 3 + 8),
                     255);
-                if (dist < 0.75f)
+
+                Color32 target;
+                if (dist < 0.7f)
                 {
-                    float t = dist / 0.75f;
-                    // 중심이 더 밝고 가장자리로 갈수록 약간 어두워짐
+                    float t = dist / 0.7f;
                     var core = new Color32(
                         (byte)Mathf.Min(255, hot.r + 40),
                         (byte)Mathf.Min(255, hot.g + 10),
@@ -344,15 +367,14 @@ public class EarthSurfaceScorch : MonoBehaviour
                 }
                 else
                 {
-                    target = Color32.Lerp(hot, rock, (dist - 0.75f) / 0.65f);
+                    target = Color32.Lerp(hot, rock, (dist - 0.7f) / 0.65f);
                 }
 
                 int idx = y * w + x;
                 Color32 p = pixels[idx];
-                float a = mask;
-                p.r = (byte)Mathf.RoundToInt(Mathf.Lerp(p.r, target.r, a));
-                p.g = (byte)Mathf.RoundToInt(Mathf.Lerp(p.g, target.g, a));
-                p.b = (byte)Mathf.RoundToInt(Mathf.Lerp(p.b, target.b, a));
+                p.r = (byte)Mathf.RoundToInt(Mathf.Lerp(p.r, target.r, mask));
+                p.g = (byte)Mathf.RoundToInt(Mathf.Lerp(p.g, target.g, mask));
+                p.b = (byte)Mathf.RoundToInt(Mathf.Lerp(p.b, target.b, mask));
                 pixels[idx] = p;
             }
         }
