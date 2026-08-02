@@ -27,9 +27,9 @@ public static class EarthTextureLoader
         if (day != null)
         {
             mat.mainTexture = day;
-            mat.color = Color.white;
-            // 바다 하이라이트가 느껴지도록 적당히 광택
-            mat.SetFloat("_Glossiness", 0.55f);
+            // 살짝 어둡게 — 구름/림이 더 살아나게
+            mat.color = new Color(0.88f, 0.9f, 0.92f, 1f);
+            mat.SetFloat("_Glossiness", 0.48f);
             mat.SetFloat("_Metallic", 0.02f);
         }
         else
@@ -51,16 +51,31 @@ public static class EarthTextureLoader
 
     public static Material CreateCloudMaterial()
     {
-        // 얇은 구름은 잘라내고(커버리지↓), 남은 덩어리는 선명하게
-        return BuildCloudMaterial(0.9f, 0.72f, 0.4f, 1.7f, Vector2.zero, Vector2.one,
-            new Color(0.96f, 0.97f, 0.99f, 1f));
+        // 레퍼런스: 소용돌이·얇은 베일 유지, 코어만 밝고 선명
+        return BuildCloudMaterial(0.78f, 0.95f, 0.22f, 1.55f, Vector2.zero, Vector2.one,
+            new Color(0.98f, 0.99f, 1f, 1f));
     }
 
-    /// <summary>보조 구름층 (현재 미사용 — 메인만으로 커버리지 조절).</summary>
+    /// <summary>구름 아래 부드러운 그림자 — 표면 깊이감.</summary>
+    public static Material CreateCloudShadowMaterial()
+    {
+        var shader = Shader.Find("EarthSmasher/CloudShadow");
+        if (shader == null)
+            return null;
+
+        var mat = new Material(shader);
+        mat.mainTexture = Clouds;
+        mat.SetFloat("_Strength", 0.38f);
+        mat.SetFloat("_Threshold", 0.2f);
+        mat.SetFloat("_Softness", 1.15f);
+        return mat;
+    }
+
+    /// <summary>보조 구름층 (옵션).</summary>
     public static Material CreateCloudDetailMaterial()
     {
-        return BuildCloudMaterial(0.2f, 0.9f, 0.45f, 1.4f, new Vector2(0.17f, 0.08f), new Vector2(1.35f, 1.35f),
-            new Color(0.92f, 0.94f, 0.97f, 1f));
+        return BuildCloudMaterial(0.22f, 1.05f, 0.32f, 1.35f, new Vector2(0.17f, 0.08f), new Vector2(1.35f, 1.35f),
+            new Color(0.94f, 0.96f, 0.99f, 1f));
     }
 
     static Material BuildCloudMaterial(float opacity, float softness, float threshold, float contrast, Vector2 offset, Vector2 tiling, Color tint)
@@ -82,7 +97,8 @@ public static class EarthTextureLoader
         mat.SetFloat("_Softness", softness);
         mat.SetFloat("_Threshold", threshold);
         mat.SetFloat("_Contrast", contrast);
-        mat.SetFloat("_LightWrap", 0.42f);
+        mat.SetFloat("_LightWrap", 0.38f);
+        mat.SetFloat("_Volume", 0.45f);
         mat.mainTextureOffset = offset;
         mat.mainTextureScale = tiling;
         return mat;
@@ -107,11 +123,12 @@ public static class EarthTextureLoader
         {
             var mat = new Material(shader);
             mat.mainTexture = water;
-            mat.SetColor("_DeepColor", new Color(0.01f, 0.07f, 0.26f, 0.5f));
-            mat.SetColor("_ShallowColor", new Color(0.08f, 0.62f, 0.7f, 0.42f));
-            mat.SetFloat("_Gloss", 0.94f);
-            mat.SetFloat("_FresnelPower", 3.2f);
-            mat.SetFloat("_SpecIntensity", 1.6f);
+            // 레퍼런스: 거의 검정에 가까운 심해 — 흰 구름 대비
+            mat.SetColor("_DeepColor", new Color(0.004f, 0.02f, 0.08f, 0.72f));
+            mat.SetColor("_ShallowColor", new Color(0.04f, 0.35f, 0.48f, 0.45f));
+            mat.SetFloat("_Gloss", 0.96f);
+            mat.SetFloat("_FresnelPower", 3.4f);
+            mat.SetFloat("_SpecIntensity", 1.35f);
             return mat;
         }
 

@@ -4,11 +4,12 @@ Shader "EarthSmasher/CloudsSoft"
     {
         _MainTex ("Cloud Map", 2D) = "white" {}
         _Color ("Tint", Color) = (1,1,1,1)
-        _Opacity ("Opacity", Range(0, 2)) = 0.9
-        _Softness ("Softness", Range(0.2, 4)) = 0.72
-        _Threshold ("Coverage Threshold", Range(0, 0.6)) = 0.4
-        _Contrast ("Contrast", Range(0.5, 3)) = 1.7
-        _LightWrap ("Light Wrap", Range(0, 1)) = 0.4
+        _Opacity ("Opacity", Range(0, 2)) = 0.78
+        _Softness ("Softness", Range(0.2, 4)) = 0.95
+        _Threshold ("Coverage Threshold", Range(0, 0.6)) = 0.22
+        _Contrast ("Contrast", Range(0.5, 3)) = 1.55
+        _LightWrap ("Light Wrap", Range(0, 1)) = 0.38
+        _Volume ("Volume Shade", Range(0, 1)) = 0.45
     }
 
     SubShader
@@ -42,6 +43,7 @@ Shader "EarthSmasher/CloudsSoft"
             float _Threshold;
             float _Contrast;
             float _LightWrap;
+            float _Volume;
 
             struct appdata
             {
@@ -69,22 +71,30 @@ Shader "EarthSmasher/CloudsSoft"
             fixed4 frag(v2f i) : SV_Target
             {
                 float4 tex = tex2D(_MainTex, i.uv);
-                float density = max(tex.r, max(tex.g, tex.b));
+                float raw = max(tex.r, max(tex.g, tex.b));
 
-                // 얇은 구름 컷오프 → 커버리지 줄이고, 남은 덩어리는 엣지 선명
-                density = saturate((density - _Threshold) / max(1e-3, 1.0 - _Threshold));
+                // 얇은 실타래는 남기고, 중간 회색 씻김만 줄여 소용돌이 형태 유지
+                float density = saturate((raw - _Threshold) / max(1e-3, 1.0 - _Threshold));
                 density = saturate(pow(density, _Softness));
                 density = saturate(pow(density, 1.0 / max(0.2, _Contrast)));
-                float core = saturate(smoothstep(0.35, 0.88, density));
+
+                // 두꺼운 코어 = 밝고 불투명 / 가장자리 = 반투명 베일
+                float core = saturate(smoothstep(0.2, 0.82, density));
+                float veil = saturate(density * (1.0 - core * 0.35));
 
                 float3 n = normalize(i.worldNormal);
                 float3 lightDir = normalize(_WorldSpaceLightPos0.xyz);
                 float ndotl = saturate(dot(n, lightDir) * (1.0 - _LightWrap) + _LightWrap);
 
-                float3 dayCol = _Color.rgb * lerp(float3(0.88, 0.9, 0.94), float3(1.0, 1.0, 1.0), core);
-                float3 nightCol = _Color.rgb * float3(0.4, 0.46, 0.56);
+                // 레퍼런스: 밝은 흰 덩어리 + 살짝 그늘져 볼륨감
+                float shade = lerp(1.0 - _Volume * 0.55, 1.0, ndotl);
+                float3 bright = _Color.rgb * float3(1.0, 1.0, 1.0);
+                float3 soft = _Color.rgb * float3(0.78, 0.82, 0.9);
+                float3 dayCol = lerp(soft, bright, core) * shade;
+                float3 nightCol = _Color.rgb * float3(0.35, 0.4, 0.5);
                 float3 col = lerp(nightCol, dayCol, ndotl);
-                float alpha = saturate(density * _Opacity * _Color.a * lerp(0.7, 1.0, core));
+
+                float alpha = saturate((veil * 0.55 + core * 0.95) * _Opacity * _Color.a);
                 return float4(col, alpha);
             }
             ENDCG

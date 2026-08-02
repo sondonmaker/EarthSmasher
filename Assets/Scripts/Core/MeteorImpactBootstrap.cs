@@ -166,6 +166,10 @@ public class MeteorImpactBootstrap : MonoBehaviour
 
         var clouds = CreateLayerSphere("Clouds", earthGo.transform, 1.028f, EarthTextureLoader.CreateCloudMaterial(), true);
         clouds.AddComponent<EarthSpin>().SetSpeed(3.2f);
+        // 구름 그림자 — 표면 위에 살짝 떠서 같이 회전
+        var cloudShadowMat = EarthTextureLoader.CreateCloudShadowMaterial();
+        if (cloudShadowMat != null)
+            CreateLayerSphere("CloudShadow", clouds.transform, 0.988f, cloudShadowMat, false);
 
         // 대기 림라이트 (안쪽 선명 + 바깥 헤일로)
         var atmosphere = CreateLayerSphere("Atmosphere", earthGo.transform, 1.055f, EarthTextureLoader.CreateAtmosphereMaterial(), false);
