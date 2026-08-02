@@ -23,8 +23,8 @@ public class EarthLayerController : MonoBehaviour
     public bool nightLightsEnabled = true;
 
     [Range(0f, 1f)] public float oceanStrength = 0.95f;
-    [Range(0f, 1f)] public float cloudsStrength = 0.9f;
-    [Range(0f, 1f)] public float atmosphereStrength = 0.4f;
+    [Range(0f, 1f)] public float cloudsStrength = 0.85f;
+    [Range(0f, 1f)] public float atmosphereStrength = 0.5f;
     [Range(0f, 1f)] public float auroraStrength = 0.85f;
     [Range(0f, 2f)] public float nightLightsStrength = 0.85f;
 

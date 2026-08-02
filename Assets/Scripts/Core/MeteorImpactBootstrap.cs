@@ -159,17 +159,15 @@ public class MeteorImpactBootstrap : MonoBehaviour
         core.GetComponent<Renderer>().material = EarthTextureLoader.CreateCoreMaterial();
         core.SetActive(false);
 
-        // 바다는 지각 셰이더에 불투명으로 구움 — 반투명 Ocean 스피어는 끔 (see-through 원인)
+        // day 맵에 바다 포함 — 반투명 Ocean 레이어는 끔 (비침 방지)
         var ocean = CreateLayerSphere("Ocean", earthGo.transform, 1.006f, EarthTextureLoader.CreateOceanMaterial(), false);
         ocean.SetActive(false);
 
         var clouds = CreateLayerSphere("Clouds", earthGo.transform, 1.028f, EarthTextureLoader.CreateCloudMaterial(), true);
         clouds.AddComponent<EarthSpin>().SetSpeed(3.2f);
-        // CloudShadow(Multiply) 제거 — 표면이 흐려 보이던 원인
 
-        // 대기 림라이트 (얇게만)
-        var atmosphere = CreateLayerSphere("Atmosphere", earthGo.transform, 1.045f, EarthTextureLoader.CreateAtmosphereMaterial(), false);
-        var halo = CreateLayerSphere("AtmosphereHalo", atmosphere.transform, 1.03f, EarthTextureLoader.CreateAtmosphereHaloMaterial(), false);
+        var atmosphere = CreateLayerSphere("Atmosphere", earthGo.transform, 1.05f, EarthTextureLoader.CreateAtmosphereMaterial(), false);
+        var halo = CreateLayerSphere("AtmosphereHalo", atmosphere.transform, 1.035f, EarthTextureLoader.CreateAtmosphereHaloMaterial(), false);
 
         var aurora = CreateLayerSphere("Aurora", earthGo.transform, 1.04f, EarthTextureLoader.CreateAuroraMaterial(), false);
 
@@ -177,9 +175,8 @@ public class MeteorImpactBootstrap : MonoBehaviour
         planet.SetVisualRefs(rend, core.transform);
         earthGo.AddComponent<EarthSpin>().SetSpeed(7.5f);
 
-        // Unity 기본 Sphere UV ≠ EarthGeo — 충돌/크랙 좌표가 반대편으로 가는 원인.
-        // 시작부터 EarthGeo 규약 메시로 맞춰 텍스처·용암·균열이 같은 지점에 붙게 함.
-        EarthCraterDeform.Ensure(planet);
+        // 메시 UV는 Unity 기본 유지 (시작 시 교체하면 텍스처가 깨짐)
+        // 크레이터 변형은 충돌 시에만 기존 메시를 복제해서 사용
 
         var body = earthGo.AddComponent<EarthBodyData>();
 

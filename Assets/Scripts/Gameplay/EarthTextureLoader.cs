@@ -35,18 +35,12 @@ public static class EarthTextureLoader
                 mat.mainTexture = day;
             if (night != null)
                 mat.SetTexture("_NightTex", night);
-            var water = Water;
-            if (water != null)
-                mat.SetTexture("_WaterTex", water);
-            mat.color = new Color(0.92f, 0.94f, 0.96f, 1f);
-            mat.SetColor("_OceanColor", new Color(0.01f, 0.05f, 0.14f, 1f));
-            mat.SetFloat("_OceanBlend", 0.94f);
-            mat.SetFloat("_Exposure", 0.92f);
-            mat.SetFloat("_Contrast", 1.12f);
-            mat.SetFloat("_Terminator", 0.26f);
-            mat.SetFloat("_NightIntensity", 1.05f);
-            mat.SetFloat("_AmbientFloor", 0.04f);
-            mat.SetFloat("_SpecIntensity", 0.55f);
+            mat.color = Color.white;
+            mat.SetFloat("_Exposure", 1.05f);
+            mat.SetFloat("_Contrast", 1.05f);
+            mat.SetFloat("_Terminator", 0.22f);
+            mat.SetFloat("_NightIntensity", 1.0f);
+            mat.SetFloat("_AmbientFloor", 0.05f);
             return mat;
         }
 
@@ -162,10 +156,10 @@ public static class EarthTextureLoader
         {
             var mat = new Material(shader);
             // 달/우주 시점: 얇고 밝은 청록 림
-            mat.SetColor("_Color", new Color(0.4f, 0.72f, 1f, 1f));
-            mat.SetFloat("_RimPower", 5.8f);
-            mat.SetFloat("_Intensity", 0.75f);
-            mat.SetFloat("_HorizonBoost", 0.28f);
+            mat.SetColor("_Color", new Color(0.5f, 0.75f, 1f, 1f));
+            mat.SetFloat("_RimPower", 4.5f);
+            mat.SetFloat("_Intensity", 1.0f);
+            mat.SetFloat("_HorizonBoost", 0.4f);
             return mat;
         }
 
@@ -185,10 +179,10 @@ public static class EarthTextureLoader
         if (shader == null) return CreateAtmosphereMaterial();
 
         var mat = new Material(shader);
-        mat.SetColor("_Color", new Color(0.5f, 0.75f, 1f, 1f));
-        mat.SetFloat("_RimPower", 4.2f);
-        mat.SetFloat("_Intensity", 0.18f);
-        mat.SetFloat("_HorizonBoost", 0.12f);
+        mat.SetColor("_Color", new Color(0.65f, 0.82f, 1f, 1f));
+        mat.SetFloat("_RimPower", 3.2f);
+        mat.SetFloat("_Intensity", 0.3f);
+        mat.SetFloat("_HorizonBoost", 0.15f);
         return mat;
     }
 

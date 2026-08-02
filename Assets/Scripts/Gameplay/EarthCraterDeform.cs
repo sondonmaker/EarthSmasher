@@ -35,32 +35,36 @@ public class EarthCraterDeform : MonoBehaviour
         if (crustFilter == null)
             return;
 
-        workingCrust = BuildUvSphere(lonSegments, latSegments);
-        workingCrust.name = "EarthCrustDeform";
-        crustFilter.mesh = workingCrust; // instance — sharedMesh면 변형이 안 먹을 수 있음
+        // 기존 Unity Sphere UV 유지 — 새 UV 구로 바꾸면 day/clouds 텍스처가 깨짐
+        workingCrust = CloneWritableMesh(crustFilter, "EarthCrustDeform");
 
         var col = GetComponent<MeshCollider>();
-        if (col != null)
+        if (col != null && workingCrust != null)
             col.sharedMesh = workingCrust;
 
-        workingOcean = ReplaceChildMesh("Ocean");
-        workingClouds = ReplaceChildMesh("Clouds");
+        workingOcean = CloneChildWritableMesh("Ocean");
+        workingClouds = CloneChildWritableMesh("Clouds");
 
         ready = true;
     }
 
-    Mesh ReplaceChildMesh(string childName)
+    Mesh CloneWritableMesh(MeshFilter mf, string name)
+    {
+        if (mf == null || mf.sharedMesh == null)
+            return null;
+        var m = Object.Instantiate(mf.sharedMesh);
+        m.name = name;
+        m.MarkDynamic();
+        mf.mesh = m;
+        return m;
+    }
+
+    Mesh CloneChildWritableMesh(string childName)
     {
         var tf = transform.Find(childName);
         if (tf == null)
             return null;
-        var mf = tf.GetComponent<MeshFilter>();
-        if (mf == null)
-            return null;
-        var m = BuildUvSphere(lonSegments, latSegments);
-        m.name = childName + "Deform";
-        mf.mesh = m;
-        return m;
+        return CloneWritableMesh(tf.GetComponent<MeshFilter>(), childName + "Deform");
     }
 
     /// <param name="radiusNorm">지구 반지름 대비 크레이터 반경</param>
