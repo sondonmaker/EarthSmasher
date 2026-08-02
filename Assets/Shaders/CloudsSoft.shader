@@ -93,8 +93,6 @@ Shader "EarthSmasher/CloudsSoft"
                 float3 col = lerp(nightCol, dayCol, ndotl);
 
                 float alpha = saturate(density * _Opacity * _Color.a);
-                // 아주 옅은 픽셀은 버려 덩어리감 감소
-                alpha *= step(0.02, alpha);
                 return float4(col, alpha);
             }
             ENDCG

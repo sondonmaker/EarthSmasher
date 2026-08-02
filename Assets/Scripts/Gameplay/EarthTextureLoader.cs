@@ -77,14 +77,14 @@ public static class EarthTextureLoader
 
         var mat = new Material(shader);
         mat.mainTexture = Clouds;
-        mat.color = new Color(0.98f, 0.99f, 1f, 1f);
-        // 알파 맵 기준: 양 적당 + 얇은 띠 유지
-        mat.SetFloat("_Opacity", 0.72f);
-        mat.SetFloat("_AlphaBoost", 1.05f);
-        mat.SetFloat("_AlphaGamma", 1.45f); // >1 → 옅은 구름 더 줄임
-        mat.SetFloat("_CoverageCut", 0.12f);
+        mat.color = new Color(1f, 1f, 1f, 1f);
+        // 알파 구름맵은 값이 옅은 편 → 불투명도/부스트 올려 보이게
+        mat.SetFloat("_Opacity", 1.55f);
+        mat.SetFloat("_AlphaBoost", 1.4f);
+        mat.SetFloat("_AlphaGamma", 0.85f); // <1 → 중간 구름도 살림
+        mat.SetFloat("_CoverageCut", 0.02f);
         mat.SetFloat("_LightWrap", 0.35f);
-        mat.SetFloat("_Volume", 0.32f);
+        mat.SetFloat("_Volume", 0.28f);
         return mat;
     }
 
