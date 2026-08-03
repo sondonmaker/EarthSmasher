@@ -53,6 +53,7 @@ public class BigMeteorStrike : MonoBehaviour
         if (earth == null) return;
         if (EarthLayerToolbar.BlocksGameplayInput || ZoomUiBlocker.BlocksGameplay || WorldStatusHud.BlocksGameplay) return;
         if (WeaponRailPanel.BlocksGameplay) return;
+        if (WeaponRailPanel.IsArmed) return;
         if (DisasterUiGate.ModalOpen) return;
         if (Time.time < _readyAt) return;
         if (!WantsBigStrike()) return;

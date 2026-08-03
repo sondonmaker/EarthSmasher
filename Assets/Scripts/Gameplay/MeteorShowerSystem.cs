@@ -38,25 +38,34 @@ public class MeteorShowerSystem : MonoBehaviour
 
     public bool TryStart()
     {
+        return TryStartAt(null);
+    }
+
+    public bool TryStartAt(Vector3? worldCenter)
+    {
         if (IsRunning)
             return false;
         if (earth == null)
             earth = FindObjectOfType<EarthPlanet>();
         if (earth == null)
             return false;
-        StartCoroutine(Run());
+        StartCoroutine(Run(worldCenter));
         return true;
     }
 
-    IEnumerator Run()
+    IEnumerator Run(Vector3? worldCenter)
     {
         IsRunning = true;
         if (cam == null)
             cam = Camera.main;
 
-        Vector3 face = cam != null
-            ? (cam.transform.position - earth.transform.position).normalized
-            : Random.onUnitSphere;
+        Vector3 face;
+        if (worldCenter.HasValue)
+            face = (worldCenter.Value - earth.transform.position).normalized;
+        else
+            face = cam != null
+                ? (cam.transform.position - earth.transform.position).normalized
+                : Random.onUnitSphere;
 
         for (int i = 0; i < count; i++)
         {

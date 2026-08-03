@@ -1,13 +1,16 @@
 using System;
 using UnityEngine;
+using UnityEngine.InputSystem;
 
 /// <summary>
-/// Solar Smash 스타일 2단 무기 레일: 오른쪽 카테고리 → 왼쪽 세부 무기.
+/// Solar Smash 스타일 2단 무기 레일.
+/// 메뉴 선택 → 지구 클릭으로 발동.
 /// </summary>
 public class WeaponRailPanel : MonoBehaviour
 {
     public static WeaponRailPanel Instance { get; private set; }
     public static bool BlocksGameplay { get; private set; }
+    public static bool IsArmed => Instance != null && !string.IsNullOrEmpty(Instance.armedId);
 
     const float CatSize = 56f;
     const float CatGap = 8f;
@@ -16,16 +19,22 @@ public class WeaponRailPanel : MonoBehaviour
     const float SubGap = 5f;
     const float Pad = 12f;
     const float Top = 64f;
+    const float TapMoveThreshold = 14f;
 
     static readonly Color Border = new Color(0.55f, 0.58f, 0.62f, 0.95f);
     static readonly Color BorderOn = new Color(1f, 0.45f, 0.12f, 1f);
     static readonly Color Face = new Color(0.12f, 0.13f, 0.15f, 0.92f);
     static readonly Color FaceOn = new Color(0.18f, 0.14f, 0.1f, 0.95f);
 
-    int selectedCat = 0; // 1번 Impact
+    int selectedCat = 0;
     int selectedSub = -1;
     bool submenuOpen = true;
     string toast;
+    string armedId;
+    string armedTitle;
+
+    bool pressTracking;
+    Vector2 pressPos;
 
     Texture2D pxFace;
     Texture2D pxFaceOn;
@@ -37,7 +46,7 @@ public class WeaponRailPanel : MonoBehaviour
     struct Cat
     {
         public string id;
-        public string icon; // simple glyph
+        public string icon;
         public string tip;
         public Sub[] subs;
     }
@@ -47,7 +56,7 @@ public class WeaponRailPanel : MonoBehaviour
         public string id;
         public string title;
         public string icon;
-        public Action fire;
+        public bool locked;
         public Func<bool> busy;
     }
 
@@ -75,11 +84,18 @@ public class WeaponRailPanel : MonoBehaviour
         selectedSub = -1;
     }
 
+    public void ClearArm()
+    {
+        armedId = null;
+        armedTitle = null;
+        toast = null;
+        pressTracking = false;
+    }
+
     void BuildCatalog()
     {
         cats = new[]
         {
-            // 1번: 우주/충격
             new Cat
             {
                 id = "impact",
@@ -87,14 +103,13 @@ public class WeaponRailPanel : MonoBehaviour
                 tip = "Impact",
                 subs = new[]
                 {
-                    SubOf("asteroid", "*", "Asteroid", FireSmallAsteroid, () => false),
-                    SubOf("shower", "S", "Meteor Shower", FireMeteorShower, ShowerBusy),
-                    SubOf("moon_crash", "O", "Moon Crash", () => FireMoon(MoonImpactMode.Crash), MoonBusy),
-                    SubOf("blackhole", "B", "Black Hole", () => ArmCosmic(CosmicAnomalyKind.BlackHole), () => false),
-                    SubOf("vortex", "V", "Vortex", () => ArmCosmic(CosmicAnomalyKind.Vortex), () => false)
+                    SubOf("asteroid", "*", "Asteroid"),
+                    SubOf("shower", "S", "Meteor Shower", ShowerBusy),
+                    SubOf("moon_crash", "O", "Moon Crash", MoonBusy),
+                    SubOf("blackhole", "B", "Black Hole"),
+                    SubOf("vortex", "V", "Vortex")
                 }
             },
-            // 2번: 미사일
             new Cat
             {
                 id = "missile",
@@ -102,13 +117,13 @@ public class WeaponRailPanel : MonoBehaviour
                 tip = "Missile",
                 subs = new[]
                 {
-                    SubOf("nuke_missile", "N", "Nuke Missile", () => ArmNuke(NukeStrikeKind.Nuclear), () => false),
-                    SubOf("fusion", "F", "Fusion Core", () => ArmNuke(NukeStrikeKind.FusionCore), () => false),
-                    SubOf("station", "T", "Missile Station", null, null),
-                    SubOf("remote", "R", "Remote Detonate", null, null),
-                    SubOf("antimatter", "A", "Antimatter", () => ArmNuke(NukeStrikeKind.Antimatter), () => false),
-                    SubOf("drill", "D", "Mining Drill", () => ArmNuke(NukeStrikeKind.MiningDrill), () => false),
-                    SubOf("guided", "G", "Guided Missile", () => ArmNuke(NukeStrikeKind.Guided), () => false)
+                    SubOf("nuke_missile", "N", "Nuke Missile"),
+                    SubOf("fusion", "F", "Fusion Core"),
+                    SubOf("station", "T", "Missile Station", null, true),
+                    SubOf("remote", "R", "Remote Detonate", null, true),
+                    SubOf("antimatter", "A", "Antimatter"),
+                    SubOf("drill", "D", "Mining Drill"),
+                    SubOf("guided", "G", "Guided Missile")
                 }
             },
             new Cat
@@ -118,10 +133,9 @@ public class WeaponRailPanel : MonoBehaviour
                 tip = "War",
                 subs = new[]
                 {
-                    SubOf("nuke_war", "N", "Nuclear War", FireNuclear, NukeBusy)
+                    SubOf("nuke_war", "N", "Nuclear War", NukeBusy)
                 }
             },
-            // 4번: 우주선 소환
             new Cat
             {
                 id = "fleet",
@@ -129,12 +143,12 @@ public class WeaponRailPanel : MonoBehaviour
                 tip = "Fleet",
                 subs = new[]
                 {
-                    SubOf("ufo", "U", "UFO", () => SummonShip(SpacecraftKind.Ufo), () => false),
-                    SubOf("cannon", "C", "Orbital Cannon", () => SummonShip(SpacecraftKind.OrbitalCannon), () => false),
-                    SubOf("fighters", "F", "Fighter Wing", () => SummonShip(SpacecraftKind.FighterWing), () => false),
-                    SubOf("battleship", "B", "Battleship", () => SummonShip(SpacecraftKind.Battleship), () => false),
-                    SubOf("planet_killer", "P", "Planet Killer", () => SummonShip(SpacecraftKind.PlanetKiller), () => false),
-                    SubOf("von_neumann", "V", "Von Neumann", () => SummonShip(SpacecraftKind.VonNeumannProbe), () => false)
+                    SubOf("ufo", "U", "UFO"),
+                    SubOf("cannon", "C", "Orbital Cannon"),
+                    SubOf("fighters", "F", "Fighter Wing"),
+                    SubOf("battleship", "B", "Battleship"),
+                    SubOf("planet_killer", "P", "Planet Killer"),
+                    SubOf("von_neumann", "V", "Von Neumann")
                 }
             },
             new Cat
@@ -144,7 +158,7 @@ public class WeaponRailPanel : MonoBehaviour
                 tip = "Quake",
                 subs = new[]
                 {
-                    SubOf("quake", "E", "Earthquake", FireQuake, QuakeBusy)
+                    SubOf("quake", "E", "Earthquake", QuakeBusy)
                 }
             },
             new Cat
@@ -154,21 +168,21 @@ public class WeaponRailPanel : MonoBehaviour
                 tip = "Meme",
                 subs = new[]
                 {
-                    SubOf("cat", "=", "Giant Cat", null, null)
+                    SubOf("cat", "=", "Giant Cat", null, true)
                 }
             }
         };
     }
 
-    static Sub SubOf(string id, string icon, string title, Action fire, Func<bool> busy)
+    static Sub SubOf(string id, string icon, string title, Func<bool> busy = null, bool locked = false)
     {
         return new Sub
         {
             id = id,
             icon = icon,
             title = title,
-            fire = fire,
-            busy = busy ?? (() => false)
+            busy = busy ?? (() => false),
+            locked = locked
         };
     }
 
@@ -207,6 +221,42 @@ public class WeaponRailPanel : MonoBehaviour
         return t;
     }
 
+    void Update()
+    {
+        if (string.IsNullOrEmpty(armedId))
+            return;
+        if (DisasterUiGate.ModalOpen)
+        {
+            ClearArm();
+            return;
+        }
+
+        var kb = Keyboard.current;
+        if (kb != null && (kb.escapeKey.wasPressedThisFrame || kb.qKey.wasPressedThisFrame))
+        {
+            ClearArm();
+            return;
+        }
+
+        var mouse = Mouse.current;
+        if (mouse != null && mouse.rightButton.wasPressedThisFrame)
+        {
+            ClearArm();
+            return;
+        }
+
+        if (BlocksGameplay || EarthLayerToolbar.BlocksGameplayInput
+            || ZoomUiBlocker.BlocksGameplay || WorldStatusHud.BlocksGameplay)
+            return;
+
+        if (!TryConsumeTap(out Vector2 screenPos))
+            return;
+        if (!TryGetEarthHit(screenPos, out Vector3 point, out Vector3 normal))
+            return;
+
+        ExecuteArmed(point, normal);
+    }
+
     void OnGUI()
     {
         EnsureGfx();
@@ -226,7 +276,6 @@ public class WeaponRailPanel : MonoBehaviour
         float hitT = Top;
         float hitB = Top + cats.Length * (CatSize + CatGap);
 
-        // Category column (right)
         for (int i = 0; i < cats.Length; i++)
         {
             float y = Top + i * (CatSize + CatGap);
@@ -245,7 +294,6 @@ public class WeaponRailPanel : MonoBehaviour
             }
         }
 
-        // Submenu column (to the left of categories)
         if (submenuOpen && selectedCat >= 0 && selectedCat < cats.Length)
         {
             var subs = cats[selectedCat].subs;
@@ -256,9 +304,9 @@ public class WeaponRailPanel : MonoBehaviour
                 float y = Top + i * (SubH + SubGap);
                 hitB = Mathf.Max(hitB, y + SubH);
                 Rect r = new Rect(subX, y, SubW, SubH);
-                bool on = selectedSub == i || IsSubAiming(subs[i].id);
+                bool on = selectedSub == i || armedId == subs[i].id;
                 bool busy = subs[i].busy != null && subs[i].busy();
-                bool locked = subs[i].fire == null;
+                bool locked = subs[i].locked;
 
                 if (DrawSubButton(r, subs[i].icon, subs[i].title, on, locked || busy))
                 {
@@ -268,21 +316,160 @@ public class WeaponRailPanel : MonoBehaviour
                     else if (busy)
                         toast = "Already running...";
                     else
-                    {
-                        toast = null;
-                        subs[i].fire?.Invoke();
-                        if (IsSubAiming(subs[i].id))
-                            toast = "Click Earth to use " + subs[i].title;
-                    }
+                        ArmWeapon(subs[i].id, subs[i].title);
                 }
             }
         }
 
-        if (!string.IsNullOrEmpty(toast))
-            GUI.Label(new Rect(screenW * 0.5f - 160f, Screen.height - 48f, 320f, 28f), toast, toastStyle);
+        string hint = !string.IsNullOrEmpty(armedId)
+            ? (armedTitle ?? armedId).ToUpperInvariant() + " armed — click Earth  (Esc/RMB cancel)"
+            : toast;
+        if (!string.IsNullOrEmpty(hint))
+            GUI.Label(new Rect(screenW * 0.5f - 220f, Screen.height - 48f, 440f, 28f), hint, toastStyle);
 
         Rect block = new Rect(hitL - 4f, hitT - 4f, hitR - hitL + 8f, hitB - hitT + 8f);
         BlocksGameplay = Event.current != null && block.Contains(Event.current.mousePosition);
+    }
+
+    void ArmWeapon(string id, string title)
+    {
+        if (armedId == id)
+        {
+            ClearArm();
+            return;
+        }
+
+        armedId = id;
+        armedTitle = title;
+        toast = null;
+        pressTracking = false;
+    }
+
+    void ExecuteArmed(Vector3 point, Vector3 normal)
+    {
+        string id = armedId;
+        if (string.IsNullOrEmpty(id))
+            return;
+
+        switch (id)
+        {
+            case "asteroid":
+            {
+                var launcher = FindObjectOfType<MeteorLauncher>();
+                if (launcher != null)
+                    launcher.FireAt(point, normal);
+                break;
+            }
+            case "shower":
+                MeteorShowerSystem.Ensure().TryStartAt(point);
+                break;
+            case "moon_crash":
+                MoonImpactSystem.Instance?.TryStartAt(MoonImpactMode.Crash, point);
+                break;
+            case "blackhole":
+                CosmicAnomalySystem.Ensure().SpawnAt(CosmicAnomalyKind.BlackHole, point, normal);
+                break;
+            case "vortex":
+                CosmicAnomalySystem.Ensure().SpawnAt(CosmicAnomalyKind.Vortex, point, normal);
+                break;
+            case "nuke_missile":
+                NuclearMissileStrike.Ensure().FireAtKind(NukeStrikeKind.Nuclear, point, normal);
+                break;
+            case "fusion":
+                NuclearMissileStrike.Ensure().FireAtKind(NukeStrikeKind.FusionCore, point, normal);
+                break;
+            case "antimatter":
+                NuclearMissileStrike.Ensure().FireAtKind(NukeStrikeKind.Antimatter, point, normal);
+                break;
+            case "drill":
+                NuclearMissileStrike.Ensure().FireAtKind(NukeStrikeKind.MiningDrill, point, normal);
+                break;
+            case "guided":
+                NuclearMissileStrike.Ensure().FireAtKind(NukeStrikeKind.Guided, point, normal);
+                break;
+            case "nuke_war":
+                NuclearWarSystem.Instance?.TryStart(100);
+                break;
+            case "ufo":
+                SpacecraftFleetSystem.Ensure().TrySummonAt(SpacecraftKind.Ufo, point);
+                break;
+            case "cannon":
+                SpacecraftFleetSystem.Ensure().TrySummonAt(SpacecraftKind.OrbitalCannon, point);
+                break;
+            case "fighters":
+                SpacecraftFleetSystem.Ensure().TrySummonAt(SpacecraftKind.FighterWing, point);
+                break;
+            case "battleship":
+                SpacecraftFleetSystem.Ensure().TrySummonAt(SpacecraftKind.Battleship, point);
+                break;
+            case "planet_killer":
+                SpacecraftFleetSystem.Ensure().TrySummonAt(SpacecraftKind.PlanetKiller, point);
+                break;
+            case "von_neumann":
+                SpacecraftFleetSystem.Ensure().TrySummonAt(SpacecraftKind.VonNeumannProbe, point);
+                break;
+            case "quake":
+            {
+                var earth = FindObjectOfType<EarthPlanet>();
+                if (earth != null)
+                {
+                    Vector3 local = earth.transform.InverseTransformPoint(point).normalized;
+                    EarthGeo.DirectionToLatLon(local, out float lat, out float lon);
+                    EarthquakeSystem.Instance?.TryStart(7.5f, lat, lon);
+                }
+                break;
+            }
+        }
+
+        // 같은 무기 연속 사용 가능 — 조준 유지
+    }
+
+    bool TryConsumeTap(out Vector2 screenPos)
+    {
+        screenPos = default;
+        var mouse = Mouse.current;
+        if (mouse == null)
+            return false;
+
+        if (mouse.leftButton.wasPressedThisFrame)
+        {
+            pressTracking = true;
+            pressPos = mouse.position.ReadValue();
+            return false;
+        }
+
+        if (pressTracking && mouse.leftButton.wasReleasedThisFrame)
+        {
+            pressTracking = false;
+            Vector2 up = mouse.position.ReadValue();
+            if ((up - pressPos).magnitude <= TapMoveThreshold)
+            {
+                screenPos = up;
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    bool TryGetEarthHit(Vector2 screenPos, out Vector3 point, out Vector3 normal)
+    {
+        point = default;
+        normal = Vector3.up;
+        var cam = Camera.main;
+        var earth = FindObjectOfType<EarthPlanet>();
+        if (cam == null || earth == null)
+            return false;
+
+        Ray ray = cam.ScreenPointToRay(screenPos);
+        if (!Physics.Raycast(ray, out RaycastHit hit, 500f))
+            return false;
+        if (hit.collider == null || hit.collider.GetComponentInParent<EarthPlanet>() != earth)
+            return false;
+
+        point = hit.point;
+        normal = hit.normal;
+        return true;
     }
 
     bool DrawSquareButton(Rect r, string icon, bool on)
@@ -329,40 +516,6 @@ public class WeaponRailPanel : MonoBehaviour
         GUI.DrawTexture(core, on ? pxFaceOn : pxFace);
     }
 
-    static bool IsMouseInRect(Rect r)
-    {
-        if (Event.current == null)
-            return false;
-        return r.Contains(Event.current.mousePosition);
-    }
-
-    // --- Actions ---
-
-    static bool IsSubAiming(string id)
-    {
-        var nuke = NuclearMissileStrike.Instance;
-        if (nuke != null && nuke.IsAiming)
-        {
-            switch (id)
-            {
-                case "nuke_missile": return nuke.AimKind == NukeStrikeKind.Nuclear;
-                case "fusion": return nuke.AimKind == NukeStrikeKind.FusionCore;
-                case "antimatter": return nuke.AimKind == NukeStrikeKind.Antimatter;
-                case "drill": return nuke.AimKind == NukeStrikeKind.MiningDrill;
-                case "guided": return nuke.AimKind == NukeStrikeKind.Guided;
-            }
-        }
-
-        var cosmic = CosmicAnomalySystem.Instance;
-        if (cosmic != null && cosmic.IsAiming)
-        {
-            if (id == "blackhole") return cosmic.AimKind == CosmicAnomalyKind.BlackHole;
-            if (id == "vortex") return cosmic.AimKind == CosmicAnomalyKind.Vortex;
-        }
-
-        return false;
-    }
-
     static bool MoonBusy()
     {
         var m = MoonImpactSystem.Instance;
@@ -381,81 +534,9 @@ public class WeaponRailPanel : MonoBehaviour
         return w != null && w.IsRunning;
     }
 
-    static void ArmNuke(NukeStrikeKind kind)
-    {
-        // cancel cosmic aim if any
-        CosmicAnomalySystem.Instance?.CancelAim();
-
-        var strike = NuclearMissileStrike.Ensure();
-        if (strike == null)
-            return;
-        if (strike.IsAiming && strike.AimKind == kind)
-            strike.CancelAim();
-        else
-            strike.BeginAim(kind);
-    }
-
-    static void ArmCosmic(CosmicAnomalyKind kind)
-    {
-        NuclearMissileStrike.Instance?.CancelAim();
-
-        var cosmic = CosmicAnomalySystem.Ensure();
-        if (cosmic == null)
-            return;
-        if (cosmic.IsAiming && cosmic.AimKind == kind)
-            cosmic.CancelAim();
-        else
-            cosmic.BeginAim(kind);
-    }
-
-    static bool FleetBusy()
-    {
-        var f = SpacecraftFleetSystem.Instance;
-        return f != null && f.IsBusy;
-    }
-
-    static void SummonShip(SpacecraftKind kind)
-    {
-        SpacecraftFleetSystem.Ensure().TrySummon(kind);
-    }
-
     static bool QuakeBusy()
     {
         var q = EarthquakeSystem.Instance;
         return q != null && q.IsRunning;
-    }
-
-    static void FireMoon(MoonImpactMode mode)
-    {
-        var moon = MoonImpactSystem.Instance;
-        if (moon == null)
-            return;
-        moon.TryStart(mode);
-    }
-
-    static void FireMeteorShower()
-    {
-        MeteorShowerSystem.Ensure().TryStart();
-    }
-
-    static void FireNuclear()
-    {
-        var war = NuclearWarSystem.Instance;
-        if (war == null)
-            return;
-        war.TryStart(100);
-    }
-
-    static void FireQuake()
-    {
-        EarthquakeConfirmUI.Ensure().Open(7.5f);
-    }
-
-    /// <summary>좌클릭과 동일 — 소행성</summary>
-    static void FireSmallAsteroid()
-    {
-        var launcher = UnityEngine.Object.FindObjectOfType<MeteorLauncher>();
-        if (launcher != null)
-            launcher.FireTowardCamera();
     }
 }

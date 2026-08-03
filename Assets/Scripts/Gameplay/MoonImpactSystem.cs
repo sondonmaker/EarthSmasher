@@ -54,21 +54,37 @@ public class MoonImpactSystem : MonoBehaviour
 
     public bool TryStart(MoonImpactMode mode)
     {
+        return TryStartAt(mode, null);
+    }
+
+    public bool TryStartAt(MoonImpactMode mode, Vector3? worldTarget)
+    {
         if (IsRunning)
             return false;
         LastMode = mode;
-        StartCoroutine(Run(mode));
+        StartCoroutine(Run(mode, worldTarget));
         return true;
     }
 
-    IEnumerator Run(MoonImpactMode mode)
+    IEnumerator Run(MoonImpactMode mode, Vector3? worldTarget)
     {
         IsRunning = true;
         if (earth == null)
             earth = FindObjectOfType<EarthPlanet>();
 
-        float lat = Random.Range(-45f, 55f);
-        float lon = Random.Range(-180f, 180f);
+        float lat;
+        float lon;
+        if (worldTarget.HasValue && earth != null)
+        {
+            Vector3 local = earth.transform.InverseTransformPoint(worldTarget.Value).normalized;
+            EarthGeo.DirectionToLatLon(local, out lat, out lon);
+        }
+        else
+        {
+            lat = Random.Range(-45f, 55f);
+            lon = Random.Range(-180f, 180f);
+        }
+
         Vector3 localDir = EarthGeo.LatLonToDirection(lat, lon);
         float R = earth != null ? earth.Radius : 2.5f;
         Vector3 center = earth != null ? earth.transform.position : Vector3.zero;

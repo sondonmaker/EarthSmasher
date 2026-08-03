@@ -57,12 +57,8 @@ public class NuclearMissileStrike : MonoBehaviour
 
     public void BeginAim(NukeStrikeKind strikeKind = NukeStrikeKind.Nuclear)
     {
-        if (earth == null)
-            earth = FindObjectOfType<EarthPlanet>();
-        if (cam == null)
-            cam = Camera.main;
         kind = strikeKind;
-        IsAiming = true;
+        IsAiming = false; // 조준 입력은 WeaponRailPanel
         pressTracking = false;
     }
 
@@ -72,45 +68,17 @@ public class NuclearMissileStrike : MonoBehaviour
         pressTracking = false;
     }
 
+    public void FireAtKind(NukeStrikeKind strikeKind, Vector3 worldPoint, Vector3 normal)
+    {
+        if (earth == null)
+            earth = FindObjectOfType<EarthPlanet>();
+        kind = strikeKind;
+        FireAt(worldPoint, normal);
+    }
+
     void Update()
     {
-        if (!IsAiming)
-            return;
-        if (DisasterUiGate.ModalOpen)
-        {
-            CancelAim();
-            return;
-        }
-
-        var kb = Keyboard.current;
-        if (kb != null && (kb.escapeKey.wasPressedThisFrame || kb.qKey.wasPressedThisFrame))
-        {
-            CancelAim();
-            return;
-        }
-
-        var mouse = Mouse.current;
-        if (mouse != null && mouse.rightButton.wasPressedThisFrame)
-        {
-            CancelAim();
-            return;
-        }
-
-        if (WeaponRailPanel.BlocksGameplay || EarthLayerToolbar.BlocksGameplayInput
-            || ZoomUiBlocker.BlocksGameplay || WorldStatusHud.BlocksGameplay)
-            return;
-
-        if (Time.time < readyAt)
-            return;
-
-        if (!TryConsumeTap(out Vector2 screenPos))
-            return;
-
-        if (!TryGetEarthHit(screenPos, out Vector3 worldPoint, out Vector3 normal))
-            return;
-
-        FireAt(worldPoint, normal);
-        readyAt = Time.time + cooldown;
+        // 입력은 WeaponRailPanel이 처리
     }
 
     void FireAt(Vector3 worldPoint, Vector3 normal)

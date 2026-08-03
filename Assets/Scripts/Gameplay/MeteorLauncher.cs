@@ -44,6 +44,7 @@ public class MeteorLauncher : MonoBehaviour
         if (EarthLayerToolbar.BlocksGameplayInput || ZoomUiBlocker.BlocksGameplay || WorldStatusHud.BlocksGameplay) return;
         if (WeaponRailPanel.BlocksGameplay) return;
         if (DisasterUiGate.ModalOpen) return;
+        if (WeaponRailPanel.IsArmed) return;
         if (NuclearMissileStrike.Instance != null && NuclearMissileStrike.Instance.IsAiming) return;
         if (CosmicAnomalySystem.Instance != null && CosmicAnomalySystem.Instance.IsAiming) return;
 
@@ -55,6 +56,14 @@ public class MeteorLauncher : MonoBehaviour
 
         if (TryGetEarthHit(screenPos, out RaycastHit hit))
             Fire(hit.point, hit.normal);
+    }
+
+    /// <summary>지정 지점에 소행성 발사.</summary>
+    public void FireAt(Vector3 point, Vector3 normal)
+    {
+        if (earth == null || Time.time < _readyAt)
+            return;
+        Fire(point, normal);
     }
 
     /// <summary>UI 버튼용: 카메라 쪽 지구 표면에 소행성(좌클릭과 동일)을 떨어뜨린다.</summary>

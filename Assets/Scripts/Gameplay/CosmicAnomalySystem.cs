@@ -50,13 +50,9 @@ public class CosmicAnomalySystem : MonoBehaviour
 
     public void BeginAim(CosmicAnomalyKind kind)
     {
+        // 레일 패널이 조준을 담당 — 직접 스폰 API만 유지
         pending = kind;
-        IsAiming = true;
-        pressTracking = false;
-        if (earth == null)
-            earth = FindObjectOfType<EarthPlanet>();
-        if (cam == null)
-            cam = Camera.main;
+        IsAiming = false;
     }
 
     public void CancelAim()
@@ -65,49 +61,19 @@ public class CosmicAnomalySystem : MonoBehaviour
         pressTracking = false;
     }
 
-    void Update()
+    public void SpawnAt(CosmicAnomalyKind kind, Vector3 point, Vector3 normal)
     {
-        if (!IsAiming)
-            return;
-        if (DisasterUiGate.ModalOpen)
-        {
-            CancelAim();
-            return;
-        }
-
-        var kb = Keyboard.current;
-        if (kb != null && (kb.escapeKey.wasPressedThisFrame || kb.qKey.wasPressedThisFrame))
-        {
-            CancelAim();
-            return;
-        }
-
-        var mouse = Mouse.current;
-        if (mouse != null && mouse.rightButton.wasPressedThisFrame)
-        {
-            CancelAim();
-            return;
-        }
-
-        if (WeaponRailPanel.BlocksGameplay || EarthLayerToolbar.BlocksGameplayInput
-            || ZoomUiBlocker.BlocksGameplay || WorldStatusHud.BlocksGameplay)
-            return;
-
-        if (!TryConsumeTap(out Vector2 screenPos))
-            return;
-        if (!TryGetEarthHit(screenPos, out Vector3 worldPoint, out Vector3 normal))
-            return;
-
-        Spawn(pending, worldPoint, normal);
-        CancelAim();
-    }
-
-    void Spawn(CosmicAnomalyKind kind, Vector3 point, Vector3 normal)
-    {
+        if (earth == null)
+            earth = FindObjectOfType<EarthPlanet>();
         if (kind == CosmicAnomalyKind.BlackHole)
             StartCoroutine(RunBlackHole(point, normal));
         else
             StartCoroutine(RunVortex(point, normal));
+    }
+
+    void Update()
+    {
+        // 입력은 WeaponRailPanel이 처리
     }
 
     IEnumerator RunBlackHole(Vector3 point, Vector3 normal)

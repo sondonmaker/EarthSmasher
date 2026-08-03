@@ -44,7 +44,15 @@ public class SpacecraftFleetSystem : MonoBehaviour
             Instance = null;
     }
 
+    Vector3 aimOverride = Vector3.forward;
+    bool hasAimOverride;
+
     public bool TrySummon(SpacecraftKind kind)
+    {
+        return TrySummonAt(kind, null);
+    }
+
+    public bool TrySummonAt(SpacecraftKind kind, Vector3? worldPoint)
     {
         if (earth == null)
             earth = FindObjectOfType<EarthPlanet>();
@@ -52,6 +60,16 @@ public class SpacecraftFleetSystem : MonoBehaviour
             return false;
         if (cam == null)
             cam = Camera.main;
+
+        if (worldPoint.HasValue)
+        {
+            aimOverride = (worldPoint.Value - earth.transform.position).normalized;
+            hasAimOverride = aimOverride.sqrMagnitude > 1e-6f;
+        }
+        else
+        {
+            hasAimOverride = false;
+        }
 
         StartCoroutine(Run(kind));
         return true;
@@ -81,11 +99,14 @@ public class SpacecraftFleetSystem : MonoBehaviour
                 yield return SummonVonNeumann();
                 break;
         }
+        hasAimOverride = false;
         IsBusy = false;
     }
 
     Vector3 FaceDir()
     {
+        if (hasAimOverride)
+            return aimOverride;
         if (cam == null)
             return Random.onUnitSphere;
         Vector3 d = (cam.transform.position - earth.transform.position).normalized;
