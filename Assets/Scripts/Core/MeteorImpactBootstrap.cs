@@ -105,6 +105,7 @@ public class MeteorImpactBootstrap : MonoBehaviour
         MeteorShowerSystem.Ensure();
         CosmicAnomalySystem.Ensure();
         SpacecraftFleetSystem.Ensure();
+        LaserStrikeSystem.Ensure();
 
         var quake = FindObjectOfType<EarthquakeSystem>();
         if (quake == null)

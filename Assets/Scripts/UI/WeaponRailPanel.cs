@@ -134,7 +134,8 @@ public class WeaponRailPanel : MonoBehaviour
                 tip = "War",
                 subs = new[]
                 {
-                    SubOf("nuke_war", "N", "Nuclear War", NukeBusy)
+                    SubOf("nuke_war", "N", "Nuclear War", NukeBusy),
+                    SubOf("quake", "E", "Earthquake", QuakeBusy)
                 }
             },
             new Cat
@@ -154,12 +155,16 @@ public class WeaponRailPanel : MonoBehaviour
             },
             new Cat
             {
-                id = "quake",
+                id = "laser",
                 icon = "5",
-                tip = "Quake",
+                tip = "Laser",
                 subs = new[]
                 {
-                    SubOf("quake", "E", "Earthquake", QuakeBusy)
+                    SubOf("laser_fire", "1", "Fire Laser"),
+                    SubOf("laser_ice", "2", "Ice Laser"),
+                    SubOf("laser_pierce", "3", "Pierce Laser"),
+                    SubOf("laser_plasma", "4", "Plasma Laser"),
+                    SubOf("laser_bolt", "5", "Lightning")
                 }
             },
             new Cat
@@ -393,6 +398,21 @@ public class WeaponRailPanel : MonoBehaviour
                 break;
             case "nuke_war":
                 NuclearWarSystem.Instance?.TryStart(100);
+                break;
+            case "laser_fire":
+                LaserStrikeSystem.Ensure().FireAt(PlanetLaserKind.Fire, point, normal);
+                break;
+            case "laser_ice":
+                LaserStrikeSystem.Ensure().FireAt(PlanetLaserKind.Ice, point, normal);
+                break;
+            case "laser_pierce":
+                LaserStrikeSystem.Ensure().FireAt(PlanetLaserKind.Pierce, point, normal);
+                break;
+            case "laser_plasma":
+                LaserStrikeSystem.Ensure().FireAt(PlanetLaserKind.Plasma, point, normal);
+                break;
+            case "laser_bolt":
+                LaserStrikeSystem.Ensure().FireAt(PlanetLaserKind.Lightning, point, normal);
                 break;
             case "ufo":
                 SpacecraftFleetSystem.Ensure().TrySummonAt(SpacecraftKind.Ufo, point);
