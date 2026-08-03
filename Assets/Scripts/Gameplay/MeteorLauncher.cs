@@ -44,6 +44,7 @@ public class MeteorLauncher : MonoBehaviour
         if (EarthLayerToolbar.BlocksGameplayInput || ZoomUiBlocker.BlocksGameplay || WorldStatusHud.BlocksGameplay) return;
         if (WeaponRailPanel.BlocksGameplay) return;
         if (DisasterUiGate.ModalOpen) return;
+        if (NuclearMissileStrike.Instance != null && NuclearMissileStrike.Instance.IsAiming) return;
 
         RefreshHud();
 

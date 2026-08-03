@@ -101,6 +101,8 @@ public class MeteorImpactBootstrap : MonoBehaviour
             war = new GameObject("NuclearWarSystem").AddComponent<NuclearWarSystem>();
         war.Configure(earth);
 
+        NuclearMissileStrike.Ensure();
+
         var quake = FindObjectOfType<EarthquakeSystem>();
         if (quake == null)
             quake = new GameObject("EarthquakeSystem").AddComponent<EarthquakeSystem>();

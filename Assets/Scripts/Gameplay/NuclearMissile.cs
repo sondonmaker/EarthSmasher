@@ -56,6 +56,41 @@ public class NuclearMissile : MonoBehaviour
         m.Begin(earth, launchLat, launchLon, targetLat, targetLon, power, flightSeconds, onImpact);
     }
 
+    /// <summary>클릭한 월드 지점으로 ICBM 발사. launch 지점은 목표에서 떨어진 임의 원점.</summary>
+    public static void LaunchToWorldPoint(
+        EarthPlanet earth,
+        Vector3 worldTarget,
+        float power,
+        float flightSeconds,
+        Action onImpact)
+    {
+        if (earth == null)
+            return;
+
+        Vector3 endLocal = earth.transform.InverseTransformPoint(worldTarget);
+        if (endLocal.sqrMagnitude < 1e-8f)
+            return;
+        Vector3 endDir = endLocal.normalized;
+
+        Vector3 axis = Vector3.Cross(endDir, Vector3.up);
+        if (axis.sqrMagnitude < 1e-4f)
+            axis = Vector3.Cross(endDir, Vector3.right);
+        axis.Normalize();
+        float arc = Random.Range(75f, 125f);
+        Vector3 startDir = (Quaternion.AngleAxis(arc, axis) * endDir).normalized;
+        startDir = (Quaternion.AngleAxis(Random.Range(-45f, 45f), endDir) * startDir).normalized;
+
+        EarthGeo.DirectionToLatLon(startDir, out float oLat, out float oLon);
+        EarthGeo.DirectionToLatLon(endDir, out float tLat, out float tLon);
+
+        float ang = Vector3.Angle(startDir, endDir);
+        float flight = flightSeconds > 0f
+            ? flightSeconds
+            : Mathf.Lerp(1.5f, 3.8f, Mathf.Clamp01(ang / 140f));
+
+        Launch(earth, oLat, oLon, tLat, tLon, power, flight, onImpact);
+    }
+
     void Begin(
         EarthPlanet planet,
         float launchLat, float launchLon,

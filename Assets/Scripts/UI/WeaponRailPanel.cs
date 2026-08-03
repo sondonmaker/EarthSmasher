@@ -119,6 +119,7 @@ public class WeaponRailPanel : MonoBehaviour
                 tip = "War",
                 subs = new[]
                 {
+                    SubOf("missile", "M", "Nuke Missile", ArmNukeMissile, NukeMissileBusy),
                     SubOf("nuke", "N", "Nuclear War", FireNuclear, NukeBusy)
                 }
             },
@@ -241,7 +242,10 @@ public class WeaponRailPanel : MonoBehaviour
                 float y = Top + i * (SubH + SubGap);
                 hitB = Mathf.Max(hitB, y + SubH);
                 Rect r = new Rect(subX, y, SubW, SubH);
-                bool on = selectedSub == i;
+                bool on = selectedSub == i
+                    || (subs[i].id == "missile"
+                        && NuclearMissileStrike.Instance != null
+                        && NuclearMissileStrike.Instance.IsAiming);
                 bool busy = subs[i].busy != null && subs[i].busy();
                 bool locked = subs[i].fire == null;
 
@@ -256,6 +260,9 @@ public class WeaponRailPanel : MonoBehaviour
                     {
                         toast = null;
                         subs[i].fire?.Invoke();
+                        if (subs[i].id == "missile" && NuclearMissileStrike.Instance != null
+                            && NuclearMissileStrike.Instance.IsAiming)
+                            toast = "Click Earth to launch missile";
                     }
                 }
             }
@@ -331,6 +338,23 @@ public class WeaponRailPanel : MonoBehaviour
     {
         var w = NuclearWarSystem.Instance;
         return w != null && w.IsRunning;
+    }
+
+    static bool NukeMissileBusy()
+    {
+        // busy 표시 대신 조준 중 하이라이트용 — fire는 항상 허용(토글)
+        return false;
+    }
+
+    static void ArmNukeMissile()
+    {
+        var strike = NuclearMissileStrike.Ensure();
+        if (strike == null)
+            return;
+        if (strike.IsAiming)
+            strike.CancelAim();
+        else
+            strike.BeginAim();
     }
 
     static bool QuakeBusy()
