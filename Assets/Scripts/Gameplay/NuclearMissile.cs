@@ -76,9 +76,9 @@ public class NuclearMissile : MonoBehaviour
         if (axis.sqrMagnitude < 1e-4f)
             axis = Vector3.Cross(endDir, Vector3.right);
         axis.Normalize();
-        float arc = Random.Range(75f, 125f);
+        float arc = UnityEngine.Random.Range(75f, 125f);
         Vector3 startDir = (Quaternion.AngleAxis(arc, axis) * endDir).normalized;
-        startDir = (Quaternion.AngleAxis(Random.Range(-45f, 45f), endDir) * startDir).normalized;
+        startDir = (Quaternion.AngleAxis(UnityEngine.Random.Range(-45f, 45f), endDir) * startDir).normalized;
 
         EarthGeo.DirectionToLatLon(startDir, out float oLat, out float oLon);
         EarthGeo.DirectionToLatLon(endDir, out float tLat, out float tLon);
