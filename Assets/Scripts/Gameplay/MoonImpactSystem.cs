@@ -132,7 +132,7 @@ public class MoonImpactSystem : MonoBehaviour
         yield return WaitSim(0.35f);
 
         IsRunning = false;
-        MoonImpactReportUI.Ensure().Show(report);
+        // Moon Impact Report 모달은 띄우지 않음
     }
 
     /// <summary>
