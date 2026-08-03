@@ -168,7 +168,7 @@ public class EarthCraterDeform : MonoBehaviour
 
         float depth = Mathf.Clamp(depthNorm, 0.02f, 0.28f);
         float radius = Mathf.Clamp(radiusNorm, 0.05f, 0.34f);
-        float floor = Mathf.Clamp(shellFloor, 0.18f, minShellRadius);
+        float floor = Mathf.Clamp(shellFloor, 0.18f, 0.45f);
         digCountSalt++;
         // rimFrac = 0 → 절대 바깥으로 솟지 않음
         DeformVerticesOnly(workingCrust, local.normalized, radius, depth, 0f, HashDir(local.normalized) ^ digCountSalt, floor);

@@ -1,8 +1,8 @@
 using UnityEngine;
 
 /// <summary>
-/// 클릭 지점에 드릴 소환 → 회전하며 파고듦.
-/// 림(테두리 융기) 없이 안쪽으로만 파서 구멍이 생김.
+/// 클릭 지점에 드릴 소환 → 회전하며 지표를 안쪽으로 뚫음.
+/// (용암 스피어/풍선 없음 — DrillBore만 사용)
 /// </summary>
 public class MiningDrillRig : MonoBehaviour
 {
@@ -11,10 +11,9 @@ public class MiningDrillRig : MonoBehaviour
     Vector3 normal;
     Transform bit;
     Transform shaft;
-    Transform lavaPit;
     float age;
-    float life = 14f;
-    float digInterval = 0.22f;
+    float life = 12f;
+    float digInterval = 0.2f;
     float nextDig;
     float spin;
     int digCount;
@@ -23,6 +22,14 @@ public class MiningDrillRig : MonoBehaviour
     {
         if (earth == null)
             return;
+
+        // 이전 잘못된 용암 풍선 정리
+        for (int i = earth.transform.childCount - 1; i >= 0; i--)
+        {
+            var ch = earth.transform.GetChild(i);
+            if (ch.name == "LavaPit")
+                Object.Destroy(ch.gameObject);
+        }
 
         var go = new GameObject("MiningDrill");
         var rig = go.AddComponent<MiningDrillRig>();
@@ -33,56 +40,56 @@ public class MiningDrillRig : MonoBehaviour
     {
         earth = planet;
         normal = worldNormal.normalized;
-        // 표면으로 스냅
         point = earth.transform.position + normal * earth.Radius;
 
-        // 로컬 Y = 바깥 법선. 비트는 -Y 방향으로 파고듦
-        transform.position = point + normal * (earth.Radius * 0.1f);
+        // 드릴 크기는 지구 대비 작게 (월드 단위)
+        float R = earth.Radius;
+        float unit = R * 0.045f;
+
+        transform.position = point + normal * (unit * 2.2f);
         transform.rotation = Quaternion.FromToRotation(Vector3.up, normal);
 
         var shaftGo = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
         Object.Destroy(shaftGo.GetComponent<Collider>());
         shaftGo.name = "Shaft";
         shaftGo.transform.SetParent(transform, false);
-        shaftGo.transform.localPosition = new Vector3(0f, 0.32f, 0f);
-        shaftGo.transform.localScale = new Vector3(0.1f, 0.32f, 0.1f);
+        shaftGo.transform.localPosition = new Vector3(0f, unit * 1.6f, 0f);
+        shaftGo.transform.localScale = new Vector3(unit * 0.55f, unit * 1.5f, unit * 0.55f);
         shaftGo.GetComponent<Renderer>().material = RuntimeMaterial.Opaque(
-            new Color(0.45f, 0.48f, 0.52f), 0.25f);
+            new Color(0.4f, 0.42f, 0.46f), 0.2f);
         shaft = shaftGo.transform;
 
-        var bitGo = GameObject.CreatePrimitive(PrimitiveType.Sphere);
+        var bitGo = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
         Object.Destroy(bitGo.GetComponent<Collider>());
         bitGo.name = "Bit";
         bitGo.transform.SetParent(transform, false);
-        bitGo.transform.localPosition = new Vector3(0f, -0.08f, 0f);
-        bitGo.transform.localScale = new Vector3(0.2f, 0.42f, 0.2f);
+        bitGo.transform.localPosition = new Vector3(0f, -unit * 0.2f, 0f);
+        bitGo.transform.localScale = new Vector3(unit * 1.1f, unit * 0.9f, unit * 1.1f);
         bitGo.GetComponent<Renderer>().material = RuntimeMaterial.Opaque(
-            new Color(0.85f, 0.55f, 0.15f), 1.4f);
+            new Color(0.55f, 0.55f, 0.58f), 0.35f);
         bit = bitGo.transform;
+
+        var tip = GameObject.CreatePrimitive(PrimitiveType.Sphere);
+        Object.Destroy(tip.GetComponent<Collider>());
+        tip.name = "Tip";
+        tip.transform.SetParent(bit, false);
+        tip.transform.localPosition = new Vector3(0f, -0.55f, 0f);
+        tip.transform.localScale = new Vector3(0.85f, 0.55f, 0.85f);
+        tip.GetComponent<Renderer>().material = RuntimeMaterial.Opaque(
+            new Color(0.7f, 0.45f, 0.15f), 0.8f);
 
         var head = GameObject.CreatePrimitive(PrimitiveType.Cube);
         Object.Destroy(head.GetComponent<Collider>());
         head.name = "Motor";
         head.transform.SetParent(transform, false);
-        head.transform.localPosition = new Vector3(0f, 0.7f, 0f);
-        head.transform.localScale = new Vector3(0.26f, 0.16f, 0.26f);
+        head.transform.localPosition = new Vector3(0f, unit * 3.4f, 0f);
+        head.transform.localScale = new Vector3(unit * 1.6f, unit * 0.9f, unit * 1.6f);
         head.GetComponent<Renderer>().material = RuntimeMaterial.Opaque(
-            new Color(0.25f, 0.28f, 0.32f), 0.15f);
+            new Color(0.22f, 0.24f, 0.28f), 0.1f);
 
-        // 구멍 안을 채울 용암 핏 (표면에 붙지 않고 살짝 안쪽)
-        var pit = GameObject.CreatePrimitive(PrimitiveType.Sphere);
-        Object.Destroy(pit.GetComponent<Collider>());
-        pit.name = "LavaPit";
-        pit.transform.SetParent(earth.transform, true);
-        pit.transform.position = point - normal * (earth.Radius * 0.02f);
-        pit.transform.localScale = Vector3.one * (earth.Radius * 0.08f);
-        pit.GetComponent<Renderer>().material = RuntimeMaterial.Opaque(
-            new Color(1f, 0.25f, 0.05f), 3.5f);
-        lavaPit = pit.transform;
-
-        nextDig = 0.1f;
-        CameraShake.Shake(0.05f, 0.1f);
-        BoreOnce(0.1f, 0.06f, 0.34f);
+        nextDig = 0.08f;
+        CameraShake.Shake(0.04f, 0.08f);
+        BoreOnce(0f);
     }
 
     void Update()
@@ -95,69 +102,57 @@ public class MiningDrillRig : MonoBehaviour
 
         age += Time.deltaTime;
         float u = Mathf.Clamp01(age / life);
-        spin += Time.deltaTime * (780f + digCount * 35f);
+        spin += Time.deltaTime * (900f + digCount * 40f);
 
-        // 드릴이 구멍 속으로 내려감
-        float sink = u * (earth.Radius * 0.18f);
-        transform.position = point + normal * (earth.Radius * 0.09f - sink);
+        float R = earth.Radius;
+        float unit = R * 0.045f;
+        // 파고들수록 드릴이 지표 아래로
+        float sink = u * (R * 0.14f);
+        transform.position = point + normal * (unit * 2.0f - sink);
 
         if (bit != null)
             bit.localRotation = Quaternion.Euler(0f, spin, 0f);
         if (shaft != null)
-            shaft.localRotation = Quaternion.Euler(0f, spin * 0.9f, 0f);
+            shaft.localRotation = Quaternion.Euler(0f, spin * 0.85f, 0f);
 
-        float buzz = Mathf.Sin(age * 60f) * 0.004f * earth.Radius;
-        transform.position += normal * buzz;
-
-        // 용암 핏도 구멍과 함께 커지고 안으로
-        if (lavaPit != null)
-        {
-            float pitR = earth.Radius * Mathf.Lerp(0.08f, 0.22f, u);
-            lavaPit.position = point - normal * (earth.Radius * Mathf.Lerp(0.02f, 0.14f, u));
-            lavaPit.localScale = Vector3.one * pitR;
-        }
+        transform.position += normal * (Mathf.Sin(age * 70f) * unit * 0.08f);
 
         if (age >= nextDig)
         {
             nextDig = age + digInterval;
-            float rad = Mathf.Lerp(0.1f, 0.26f, u);
-            float depth = Mathf.Lerp(0.05f, 0.2f, u);
-            float floor = Mathf.Lerp(0.34f, 0.2f, u); // 점점 더 깊은 바닥
-            BoreOnce(rad, depth, floor);
+            BoreOnce(u);
         }
 
         if (age >= life)
         {
-            BoreOnce(0.28f, 0.22f, 0.2f);
-            CameraShake.Shake(0.12f, 0.18f);
-            // 드릴은 사라지고 용암 구멍은 남김
+            BoreOnce(1f);
+            CameraShake.Shake(0.1f, 0.14f);
             Destroy(gameObject);
         }
     }
 
-    void BoreOnce(float radiusNorm, float depthNorm, float shellFloor)
+    void BoreOnce(float progress)
     {
         digCount++;
+        // 안쪽으로만 — 풍선/림 없음
+        float rad = Mathf.Lerp(0.09f, 0.24f, progress);
+        float depth = Mathf.Lerp(0.06f, 0.24f, progress);
+        float floor = Mathf.Lerp(0.32f, 0.2f, progress);
+
         var deform = EarthCraterDeform.Ensure(earth);
         if (deform != null)
-            deform.DrillBore(point, radiusNorm, depthNorm, shellFloor);
+            deform.DrillBore(point, rad, depth, floor);
 
-        EarthSurfaceScorch.Ensure(earth)?.BurnAt(point, radiusNorm * 0.9f, 0.75f);
+        EarthSurfaceScorch.Ensure(earth)?.BurnAt(point, rad * 0.85f, 0.7f);
 
-        // 코어가 보이도록 (깊게 팠을 때)
-        if (digCount >= 8)
+        if (digCount >= 10)
         {
             var core = earth.transform.Find("Core");
-            if (core != null && !core.gameObject.activeSelf)
+            if (core != null)
                 core.gameObject.SetActive(true);
         }
 
-        if (digCount % 2 == 0)
-            CameraShake.Shake(0.03f, 0.05f);
-    }
-
-    void OnDestroy()
-    {
-        // lavaPit은 지구 자식으로 남겨 구멍 시각 유지
+        if (digCount % 3 == 0)
+            CameraShake.Shake(0.025f, 0.04f);
     }
 }
