@@ -96,14 +96,14 @@ public class NuclearMissileStrike : MonoBehaviour
                 MiningDrillRig.Spawn(earth, worldPoint, normal);
                 break;
             case NukeStrikeKind.Antimatter:
-                NuclearMissile.LaunchToWorldPoint(earth, worldPoint, 2.1f, -1f, null);
+                NuclearMissile.LaunchToWorldPoint(earth, worldPoint, 2.1f, 1.25f, null);
                 break;
             case NukeStrikeKind.Guided:
                 // 빠르게 돌입
-                NuclearMissile.LaunchToWorldPoint(earth, worldPoint, 1.15f, 0.75f, null);
+                NuclearMissile.LaunchToWorldPoint(earth, worldPoint, 1.15f, 0.55f, null);
                 break;
             default:
-                NuclearMissile.LaunchToWorldPoint(earth, worldPoint, 1.35f, -1f, null);
+                NuclearMissile.LaunchToWorldPoint(earth, worldPoint, 1.35f, 1.2f, null);
                 break;
         }
     }
@@ -208,8 +208,14 @@ public class NuclearMissileStrike : MonoBehaviour
             fontStyle = FontStyle.Bold
         };
         style.normal.textColor = new Color(1f, 0.85f, 0.35f, 1f);
-        GUI.Label(new Rect(0f, Screen.height - 56f, Screen.width, 28f),
-            LabelFor(kind) + " — click Earth  (Esc / RMB cancel)", style);
+
+        MobileUi.Begin();
+        string hint = MobileUi.IsTouchDevice
+            ? " — tap Earth"
+            : " — click Earth  (Esc / RMB cancel)";
+        GUI.Label(new Rect(0f, MobileUi.Height - 56f, MobileUi.Width, 28f),
+            LabelFor(kind) + hint, style);
+        MobileUi.End();
     }
 
     static string LabelFor(NukeStrikeKind k)

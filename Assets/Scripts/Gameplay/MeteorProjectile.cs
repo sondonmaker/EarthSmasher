@@ -5,7 +5,7 @@ using UnityEngine;
 /// </summary>
 public class MeteorProjectile : MonoBehaviour
 {
-    [SerializeField] float speed = 32f;
+    [SerializeField] float speed = 22f;
     [SerializeField] float damage = 8f;
     [SerializeField] float impactFlashIntensity = 12f;
     [SerializeField] float impactFlashDuration = 0.4f;

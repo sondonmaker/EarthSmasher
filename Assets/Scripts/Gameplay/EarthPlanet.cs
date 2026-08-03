@@ -48,6 +48,15 @@ public class EarthPlanet : MonoBehaviour
         Damaged?.Invoke(_heat * 100f, worldPoint);
     }
 
+    /// <summary>누적된 피해 표현(열/핵 그을음/코어 노출)을 되돌린다.</summary>
+    public void RestoreState()
+    {
+        _heat = 0f;
+        _nuclearScorch = 0f;
+        _impactCount = 0;
+        ApplyVisuals();
+    }
+
     public void ApplyNuclearScorch(float intensity)
     {
         _nuclearScorch = Mathf.Clamp01(Mathf.Max(_nuclearScorch, intensity));

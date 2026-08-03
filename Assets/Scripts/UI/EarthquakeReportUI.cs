@@ -93,11 +93,18 @@ public class EarthquakeReportUI : MonoBehaviour
         if (!visible || report == null)
             return;
 
+        MobileUi.Begin();
+        DrawGui();
+        MobileUi.End();
+    }
+
+    void DrawGui()
+    {
         EnsureStyles();
 
-        float w = Mathf.Min(400f, Screen.width - 40f);
-        float h = Mathf.Min(360f, Screen.height - 40f);
-        Rect panel = new Rect((Screen.width - w) * 0.5f, (Screen.height - h) * 0.5f, w, h);
+        float w = Mathf.Min(400f, MobileUi.Width - 40f);
+        float h = Mathf.Min(360f, MobileUi.Height - 40f);
+        Rect panel = new Rect((MobileUi.Width - w) * 0.5f, (MobileUi.Height - h) * 0.5f, w, h);
         GUI.DrawTexture(panel, bg);
 
         if (GUI.Button(new Rect(panel.x + 10, panel.y + 10, 36, 28), "X"))

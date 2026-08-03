@@ -44,7 +44,7 @@ public static class EarthTextureLoader
             return mat;
         }
 
-        var fb = new Material(Shader.Find("Standard"));
+        var fb = new Material(SafeShader("Standard"));
         if (day != null)
         {
             fb.mainTexture = day;
@@ -68,7 +68,7 @@ public static class EarthTextureLoader
         var shader = Shader.Find("EarthSmasher/CloudsSoft");
         if (shader == null)
         {
-            var fallback = new Material(Shader.Find("Standard"));
+            var fallback = new Material(SafeShader("Standard"));
             fallback.mainTexture = Clouds;
             fallback.color = new Color(0.98f, 0.99f, 1f, 0.45f);
             SetTransparent(fallback);
@@ -110,7 +110,7 @@ public static class EarthTextureLoader
 
     public static Material CreateCoreMaterial()
     {
-        var mat = new Material(Shader.Find("Standard"));
+        var mat = new Material(SafeShader("Standard"));
         mat.color = new Color(1f, 0.28f, 0.04f);
         mat.EnableKeyword("_EMISSION");
         mat.SetColor("_EmissionColor", new Color(1f, 0.45f, 0.08f) * 4.5f);
@@ -137,7 +137,7 @@ public static class EarthTextureLoader
         }
 
         // 폴백
-        var fb = new Material(Shader.Find("Standard"));
+        var fb = new Material(SafeShader("Standard"));
         var oceanColor = new Color(0.02f, 0.28f, 0.55f, 0.45f);
         if (water != null)
         {
@@ -165,7 +165,7 @@ public static class EarthTextureLoader
             return mat;
         }
 
-        var fb = new Material(Shader.Find("Standard"));
+        var fb = new Material(SafeShader("Standard"));
         fb.color = new Color(0.45f, 0.7f, 1f, 0.2f);
         fb.EnableKeyword("_EMISSION");
         fb.SetColor("_EmissionColor", new Color(0.35f, 0.6f, 1f) * 0.5f);
@@ -188,18 +188,59 @@ public static class EarthTextureLoader
         return mat;
     }
 
+    /// <summary>
+    /// Standard + SetTransparent 는 쓰지 않는다. 빌드에서 _ALPHABLEND_ON 변형이
+    /// 스트리핑되면 알파가 1로 강제되어, 지구보다 큰 오로라 셸이 행성 전체를
+    /// 시커멓게 덮어버린다. 가산 블렌딩 전용 셰이더만 사용한다.
+    /// </summary>
     public static Material CreateAuroraMaterial()
     {
-        var mat = new Material(Shader.Find("Standard"));
         var tex = EarthGeo.BuildAuroraTexture(1024, 512);
-        mat.mainTexture = tex;
-        mat.color = Color.white;
-        mat.EnableKeyword("_EMISSION");
-        mat.SetTexture("_EmissionMap", tex);
-        mat.SetColor("_EmissionColor", new Color(0.45f, 1f, 0.7f) * 2.0f);
-        SetTransparent(mat);
-        mat.renderQueue = 3050;
-        return mat;
+
+        var shader = Shader.Find("EarthSmasher/AuroraGlow");
+        if (shader != null)
+        {
+            var mat = new Material(shader);
+            mat.mainTexture = tex;
+            mat.SetColor("_Color", new Color(1f, 1f, 1f, 0.85f));
+            mat.SetColor("_EmissionColor", new Color(0.45f, 1f, 0.7f) * 2.0f);
+            mat.SetFloat("_Intensity", 0.75f);
+            return mat;
+        }
+
+        // 폴백도 가산에 가까운 언릿만 — 불투명해질 수 있는 Standard는 금지.
+        var fb = new Material(SafeShader("Sprites/Default"));
+        fb.mainTexture = tex;
+        fb.color = new Color(0.45f, 1f, 0.7f, 0.7f);
+        fb.renderQueue = 3050;
+        return fb;
+    }
+
+    /// <summary>
+    /// 빌드에서 셰이더가 제거되면 Shader.Find가 null을 주고 new Material(null)이
+    /// 예외를 던져 부트스트랩 전체가 죽는다. 절대 null을 반환하지 않는다.
+    /// </summary>
+    public static Shader SafeShader(params string[] names)
+    {
+        foreach (string n in names)
+        {
+            var s = Shader.Find(n);
+            if (s != null)
+                return s;
+        }
+
+        foreach (string n in new[] { "Standard", "Universal Render Pipeline/Lit", "Sprites/Default", "Legacy Shaders/Diffuse" })
+        {
+            var s = Shader.Find(n);
+            if (s != null)
+            {
+                Debug.LogWarning($"[EarthTextureLoader] Missing shader ({string.Join(", ", names)}) — falling back to {n}. Add it to Always Included Shaders.");
+                return s;
+            }
+        }
+
+        Debug.LogError("[EarthTextureLoader] No usable shader found at all.");
+        return null;
     }
 
     static Texture2D Load(string path)

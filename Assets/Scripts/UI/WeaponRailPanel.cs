@@ -275,7 +275,14 @@ public class WeaponRailPanel : MonoBehaviour
             return;
         }
 
-        float screenW = Screen.width;
+        MobileUi.Begin();
+        DrawRail();
+        MobileUi.End();
+    }
+
+    void DrawRail()
+    {
+        float screenW = MobileUi.Width;
         float catX = screenW - Pad - CatSize;
         float hitL = catX;
         float hitR = screenW - Pad;
@@ -327,14 +334,29 @@ public class WeaponRailPanel : MonoBehaviour
             }
         }
 
+        float screenH = MobileUi.Height;
+        bool touch = MobileUi.IsTouchDevice;
+
         string hint = !string.IsNullOrEmpty(armedId)
-            ? (armedTitle ?? armedId).ToUpperInvariant() + " armed — click Earth  (Esc/RMB cancel)"
+            ? (armedTitle ?? armedId).ToUpperInvariant() + (touch ? " armed — tap Earth" : " armed — click Earth  (Esc/RMB cancel)")
             : toast;
         if (!string.IsNullOrEmpty(hint))
-            GUI.Label(new Rect(screenW * 0.5f - 220f, Screen.height - 48f, 440f, 28f), hint, toastStyle);
+            GUI.Label(new Rect(screenW * 0.5f - 220f, screenH - 48f, 440f, 28f), hint, toastStyle);
 
         Rect block = new Rect(hitL - 4f, hitT - 4f, hitR - hitL + 8f, hitB - hitT + 8f);
-        BlocksGameplay = Event.current != null && block.Contains(Event.current.mousePosition);
+        bool blocking = Event.current != null && block.Contains(Event.current.mousePosition);
+
+        // 폰에는 Esc/우클릭이 없으니 조준 해제 버튼을 띄운다.
+        if (touch && !string.IsNullOrEmpty(armedId))
+        {
+            Rect cancel = new Rect(Pad, screenH - 62f, 104f, 46f);
+            if (DrawSubButton(cancel, "X", "Cancel", false, false))
+                ClearArm();
+            if (Event.current != null && cancel.Contains(Event.current.mousePosition))
+                blocking = true;
+        }
+
+        BlocksGameplay = blocking;
     }
 
     void ArmWeapon(string id, string title)
@@ -451,6 +473,54 @@ public class WeaponRailPanel : MonoBehaviour
     bool TryConsumeTap(out Vector2 screenPos)
     {
         screenPos = default;
+
+        // 터치 우선 — 폰에서는 Mouse.current가 없거나 터치를 흉내 내기만 한다.
+        var touchscreen = Touchscreen.current;
+        if (touchscreen != null)
+        {
+            int active = 0;
+            int idx = -1;
+            for (int i = 0; i < touchscreen.touches.Count; i++)
+            {
+                var t = touchscreen.touches[i];
+                if (t.press.isPressed || t.press.wasPressedThisFrame || t.press.wasReleasedThisFrame)
+                {
+                    active++;
+                    idx = i;
+                }
+            }
+
+            // 두 손가락 이상은 카메라 조작 — 발사하지 않는다.
+            if (active > 1)
+            {
+                pressTracking = false;
+                return false;
+            }
+
+            if (active == 1)
+            {
+                var t = touchscreen.touches[idx];
+                if (t.press.wasPressedThisFrame)
+                {
+                    pressTracking = true;
+                    pressPos = t.position.ReadValue();
+                    return false;
+                }
+
+                if (pressTracking && t.press.wasReleasedThisFrame)
+                {
+                    pressTracking = false;
+                    Vector2 up = t.position.ReadValue();
+                    if ((up - pressPos).magnitude <= TapMoveThreshold * MobileUi.Scale)
+                    {
+                        screenPos = up;
+                        return true;
+                    }
+                }
+                return false;
+            }
+        }
+
         var mouse = Mouse.current;
         if (mouse == null)
             return false;

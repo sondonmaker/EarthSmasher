@@ -159,7 +159,7 @@ public class NuclearWarSystem : MonoBehaviour
                 float ang = Vector3.Angle(
                     EarthGeo.LatLonToDirection(oLat, oLon),
                     EarthGeo.LatLonToDirection(tLat, tLon));
-                float flight = Mathf.Lerp(1.6f, 4.2f, Mathf.Clamp01(ang / 140f));
+                float flight = Mathf.Lerp(1.1f, 2.8f, Mathf.Clamp01(ang / 140f));
                 float power = Random.Range(0.75f, 1.65f) * Mathf.Lerp(0.85f, 1.25f, target.weight);
 
                 inflight++;

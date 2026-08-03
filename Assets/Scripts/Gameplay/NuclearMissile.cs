@@ -81,9 +81,9 @@ public class NuclearMissile : MonoBehaviour
         if (Vector3.Dot(approach, normal) < 0.15f)
             approach = (normal + lateral * 0.6f).normalized;
 
-        float startDist = earth.Radius * (flightSeconds > 0f && flightSeconds < 1.2f
-            ? UnityEngine.Random.Range(2.2f, 3.0f)   // guided 등 빠른 미사일: 더 가까이서 출발
-            : UnityEngine.Random.Range(3.2f, 5.2f));
+        float startDist = earth.Radius * (flightSeconds > 0f && flightSeconds < 1.35f
+            ? UnityEngine.Random.Range(2.0f, 2.8f)   // 빠른 미사일: 더 가까이서 출발
+            : UnityEngine.Random.Range(2.6f, 4.0f));
         Vector3 start = center + approach * startDist;
 
         // 중간 제어점: 옆으로 휘는 곡선 (직선 낙하 방지)
@@ -98,7 +98,7 @@ public class NuclearMissile : MonoBehaviour
 
         float flight = flightSeconds > 0f
             ? flightSeconds
-            : UnityEngine.Random.Range(2.0f, 3.4f);
+            : UnityEngine.Random.Range(1.15f, 1.7f);
 
         var go = CreateBody(earth, tiny: false);
         go.transform.SetParent(null, true); // 월드 공간 비행

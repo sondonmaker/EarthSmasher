@@ -39,21 +39,38 @@ public static class EarthGeo
         lonDeg = Mathf.Atan2(dir.x, dir.z) * Mathf.Rad2Deg;
     }
 
-    /// <summary>텍스처 UV (Unity sphere) → 위경도</summary>
+    // 실제 지구 메시의 UV 규칙. EarthMeshBuilder가 기준 메시에서 역산해 채운다.
+    // 이게 틀리면 지형은 맞는 곳이 파이는데 그을음/용암 텍스처는 엉뚱한 곳(반대편)에 찍힌다.
+    public static float UvLonOffset;
+    public static bool UvLonMirrored;
+    public static bool UvLatFlipped;
+
+    /// <summary>텍스처 UV → 위경도</summary>
     public static void UvToLatLon(float u, float v, out float latDeg, out float lonDeg)
     {
-        latDeg = Mathf.Lerp(-90f, 90f, v);
-        lonDeg = Mathf.Lerp(-180f, 180f, u);
+        float vBase = UvLatFlipped ? 1f - v : v;
+        latDeg = Mathf.Lerp(-90f, 90f, vBase);
+
+        float eu = UvLonMirrored
+            ? Mathf.Repeat(UvLonOffset - u, 1f)
+            : Mathf.Repeat(u - UvLonOffset, 1f);
+        lonDeg = eu * 360f - 180f;
     }
 
-    /// <summary>위경도 → Unity sphere UV</summary>
+    /// <summary>위경도 → 텍스처 UV</summary>
     public static void LatLonToUv(float latDeg, float lonDeg, out float u, out float v)
     {
-        v = Mathf.InverseLerp(-90f, 90f, latDeg);
+        float vBase = Mathf.InverseLerp(-90f, 90f, latDeg);
+        v = UvLatFlipped ? 1f - vBase : vBase;
+
         float lon = lonDeg;
         if (lon < -180f) lon += 360f;
         if (lon > 180f) lon -= 360f;
-        u = Mathf.InverseLerp(-180f, 180f, lon);
+        float eu = Mathf.InverseLerp(-180f, 180f, lon);
+
+        u = UvLonMirrored
+            ? Mathf.Repeat(UvLonOffset - eu, 1f)
+            : Mathf.Repeat(eu + UvLonOffset, 1f);
     }
 
     /// <summary>

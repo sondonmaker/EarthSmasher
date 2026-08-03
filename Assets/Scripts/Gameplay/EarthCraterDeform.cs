@@ -4,21 +4,23 @@ using UnityEngine;
 /// <summary>
 /// 지구 메시를 판다. 같은 지점 반복 타격 시 누적.
 ///
-/// HARD RULE: 지구 메시를 절대 리메시/UV 재생성하지 않는다.
-/// (BuildUvSphere 등으로 교체하면 day 맵 UV가 깨져 전체가 투명·이상해 보임)
-/// 허용: 기존 Unity Sphere 메시 복제 후 vertices만 이동.
+/// HARD RULE: 런타임에 리메시/UV 재생성 금지 — vertices만 이동한다.
+/// (UV를 다시 쓰면 day 맵이 깨져 지구 전체가 투명해진다)
+/// 메시 밀도는 생성 시점에 EarthMeshBuilder가 한 번만 올린다.
 /// </summary>
 public class EarthCraterDeform : MonoBehaviour
 {
     [SerializeField] MeshFilter crustFilter;
     [SerializeField] float mergeAngleDeg = 10f;
-    [SerializeField] float maxDigDepth = 0.12f;
+    [SerializeField] float maxDigDepth = 0.18f;
     [SerializeField] float minShellRadius = 0.36f;
 
     Mesh workingCrust;
+    Vector3[] pristineVerts;
     int lockedVertexCount;
     int lockedUvCount;
     bool ready;
+    bool meshDirty;
     int digCountSalt;
     readonly List<DigSite> sites = new List<DigSite>();
 
@@ -63,11 +65,30 @@ public class EarthCraterDeform : MonoBehaviour
             return;
         }
 
+        // 초기화용 원본 지형 스냅샷 (mesh.vertices는 복사본을 돌려준다)
+        pristineVerts = workingCrust.vertices;
+
         var col = GetComponent<MeshCollider>();
         if (col != null)
             col.sharedMesh = workingCrust;
 
         ready = true;
+    }
+
+    /// <summary>파낸 지형을 원래 구체로 되돌린다.</summary>
+    public void RestoreShape()
+    {
+        sites.Clear();
+        digCountSalt = 0;
+
+        if (workingCrust == null || pristineVerts == null)
+            return;
+        if (pristineVerts.Length != workingCrust.vertexCount)
+            return;
+
+        workingCrust.vertices = pristineVerts;
+        workingCrust.RecalculateBounds();
+        meshDirty = true;
     }
 
     /// <summary>기존 MeshFilter 메시만 Instantiate. UV 재작성/리메시 절대 금지.</summary>
@@ -213,14 +234,14 @@ public class EarthCraterDeform : MonoBehaviour
         RefreshCollider();
     }
 
+    /// <summary>
+    /// 정점 수만 확인한다. 변형은 vertices만 건드리므로 uv/triangles는 바뀔 수 없고,
+    /// mesh.uv 접근은 매번 전체 배열을 복사해 고밀도 메시에서 비용이 크다.
+    /// (전체 UV 검증은 EnsureReady에서 한 번만)
+    /// </summary>
     bool UvLockIntact(Mesh mesh)
     {
-        if (mesh == null)
-            return false;
-        if (mesh.vertexCount != lockedVertexCount)
-            return false;
-        var uv = mesh.uv;
-        return uv != null && uv.Length == lockedUvCount && uv.Length == mesh.vertexCount;
+        return mesh != null && mesh.vertexCount == lockedVertexCount && lockedUvCount == lockedVertexCount;
     }
 
     DigSite FindOrCreateSite(Vector3 dir)
@@ -245,13 +266,38 @@ public class EarthCraterDeform : MonoBehaviour
         return created;
     }
 
+    /// <summary>
+    /// 법선 재계산은 고밀도 메시에서 가장 비싼 작업이라, 한 프레임에 여러 번 맞아도
+    /// (운석우 등) 프레임당 한 번만 돌린다.
+    /// </summary>
     void RefreshCollider()
     {
-        var col = GetComponent<MeshCollider>();
-        if (col == null || workingCrust == null)
+        meshDirty = true;
+    }
+
+    void LateUpdate()
+    {
+        if (!meshDirty || workingCrust == null)
             return;
-        col.sharedMesh = null;
-        col.sharedMesh = workingCrust;
+        meshDirty = false;
+
+        workingCrust.RecalculateNormals();
+
+        var col = GetComponent<MeshCollider>();
+        if (col != null)
+        {
+            col.sharedMesh = null;
+            col.sharedMesh = workingCrust;
+        }
+    }
+
+    /// <summary>구면 위에서 연속적인 값 노이즈 (0..1).</summary>
+    static float SurfaceNoise(Vector3 n, float frequency, float seed)
+    {
+        float a = Mathf.PerlinNoise(n.x * frequency + seed, n.y * frequency + seed);
+        float b = Mathf.PerlinNoise(n.y * frequency + seed + 31.4f, n.z * frequency + seed + 17.7f);
+        float c = Mathf.PerlinNoise(n.z * frequency + seed + 57.2f, n.x * frequency + seed + 91.3f);
+        return (a + b + c) / 3f;
     }
 
     static int HashDir(Vector3 d)
@@ -269,10 +315,6 @@ public class EarthCraterDeform : MonoBehaviour
     static void DeformVerticesOnly(
         Mesh mesh, Vector3 impactDir, float craterAngle, float depthFrac, float rimFrac, int seed, float minRadius)
     {
-        // UV 스냅샷 — 변형 후 반드시 복원 (실수로 깨지는 것 방지)
-        Vector2[] uvLock = mesh.uv;
-        int[] triLock = mesh.triangles;
-
         var rng = new System.Random(seed);
         float stretchA = Mathf.Lerp(0.75f, 1.25f, (float)rng.NextDouble());
         float stretchB = Mathf.Lerp(0.78f, 1.22f, (float)rng.NextDouble());
@@ -296,6 +338,7 @@ public class EarthCraterDeform : MonoBehaviour
         var verts = mesh.vertices;
         bool changed = false;
         float craterRad = Mathf.Clamp(craterAngle, 0.05f, 0.4f);
+        float noiseSeed = (seed & 0xFFFF) * 0.0137f;
 
         for (int i = 0; i < verts.Length; i++)
         {
@@ -319,26 +362,37 @@ public class EarthCraterDeform : MonoBehaviour
             float ellipse = stretchA * Mathf.Cos(phi) * Mathf.Cos(phi)
                           + stretchB * Mathf.Sin(phi) * Mathf.Sin(phi);
             float wave = 1f + n1 * Mathf.Sin(h1 * phi + p1) + n2 * Mathf.Sin(h2 * phi + p2);
-            float localAngle = craterRad * Mathf.Clamp(ellipse * wave, 0.55f, 1.45f);
+            // 가장자리를 들쭉날쭉하게 — 고밀도 메시라야 살아난다
+            float edgeNoise = 1f + 0.22f * (SurfaceNoise(n, 9.5f, noiseSeed) - 0.5f);
+            float localAngle = craterRad * Mathf.Clamp(ellipse * wave * edgeNoise, 0.5f, 1.5f);
 
             float t = ang / Mathf.Max(1e-4f, localAngle);
-            if (t > 1.4f)
+            if (t > 1.45f)
                 continue;
 
             float radialDelta = 0f;
             if (t <= 1f)
             {
-                float bowl = 1f - t;
-                bowl = bowl * bowl * (3f - 2f * bowl);
+                // 넓고 평평한 바닥 + 가파른 벽 (매끈한 눌림 방지)
+                float wall = 1f - Mathf.SmoothStep(0.45f, 1f, t);
+                float floorRough = 1f + 0.35f * (SurfaceNoise(n, 22f, noiseSeed + 5.3f) - 0.5f);
                 float asym = 1f + 0.15f * Mathf.Sin(phi + p1);
-                radialDelta -= depthFrac * len * Mathf.Pow(bowl, 0.85f) * depthBias * asym;
+                radialDelta -= depthFrac * len * wall * floorRough * depthBias * asym;
 
                 if (rimFrac > 1e-5f)
                 {
-                    float rimCenter = 0.86f + 0.08f * Mathf.Sin(phi * 3f + p2);
-                    float rim = Mathf.Exp(-Mathf.Pow((t - rimCenter) * 5.2f, 2f));
-                    radialDelta += rimFrac * len * rim;
+                    float rimCenter = 0.9f + 0.06f * Mathf.Sin(phi * 3f + p2);
+                    float rim = Mathf.Exp(-Mathf.Pow((t - rimCenter) * 7f, 2f));
+                    float rimJag = 0.6f + 0.8f * SurfaceNoise(n, 16f, noiseSeed + 11.1f);
+                    radialDelta += rimFrac * len * rim * rimJag;
                 }
+            }
+            else if (rimFrac > 1e-5f)
+            {
+                // 크레이터 밖으로 흩뿌려진 이젝타 능선
+                float fade = 1f - Mathf.InverseLerp(1f, 1.45f, t);
+                float ejecta = SurfaceNoise(n, 14f, noiseSeed + 3.7f) - 0.45f;
+                radialDelta += rimFrac * len * 0.45f * fade * Mathf.Max(0f, ejecta);
             }
 
             if (Mathf.Abs(radialDelta) < 1e-7f)
@@ -352,21 +406,16 @@ public class EarthCraterDeform : MonoBehaviour
             return;
 
         mesh.vertices = verts;
-        // UV/triangles 강제 유지 — 투명 지구 방지의 핵심
-        mesh.uv = uvLock;
-        mesh.triangles = triLock;
-        mesh.RecalculateNormals();
+        // vertices만 갈아끼우므로 uv/triangles는 그대로다. 고밀도 메시에서 매 타격마다
+        // 인덱스 버퍼를 다시 올리면 폰에서 눈에 띄게 끊긴다.
         mesh.RecalculateBounds();
-        mesh.RecalculateTangents();
+        // 법선은 프레임당 한 번만 (LateUpdate에서 처리)
     }
 
     /// <summary>밖으로 뾰족하게 밀어내는 변형 (블랙홀 버그 연출을 무기로).</summary>
     static void DeformSpikeOut(
         Mesh mesh, Vector3 impactDir, float craterAngle, float heightFrac, int seed, float maxRadius)
     {
-        Vector2[] uvLock = mesh.uv;
-        int[] triLock = mesh.triangles;
-
         var rng = new System.Random(seed);
         float rot = (float)(rng.NextDouble() * Mathf.PI * 2.0);
         int lobes = 3 + rng.Next(0, 4);
@@ -428,10 +477,6 @@ public class EarthCraterDeform : MonoBehaviour
             return;
 
         mesh.vertices = verts;
-        mesh.uv = uvLock;
-        mesh.triangles = triLock;
-        mesh.RecalculateNormals();
         mesh.RecalculateBounds();
-        mesh.RecalculateTangents();
     }
 }

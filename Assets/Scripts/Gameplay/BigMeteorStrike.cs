@@ -11,7 +11,7 @@ public class BigMeteorStrike : MonoBehaviour
     [SerializeField] EarthPlanet earth;
     [SerializeField] float meteorScale = 1.35f;
     [SerializeField] float approachDistanceMul = 4.5f;
-    [SerializeField] float speed = 14f;
+    [SerializeField] float speed = 9.5f;
     [SerializeField] float damage = 22f;
     [SerializeField] float explosionPower = 1.6f;
     [SerializeField] float cooldown = 2.5f;

@@ -13,7 +13,8 @@ public class EarthLayerController : MonoBehaviour
     [SerializeField] GameObject aurora;
 
     [Header("Debug markers (자기극)")]
-    [SerializeField] bool showMagneticPoles = true;
+    // 개발용 마커. 켜면 자북/자남에 발광 구체가 떠서 우주 뷰를 해친다.
+    [SerializeField] bool showMagneticPoles = false;
 
     [Header("State")]
     public bool oceanEnabled = false;

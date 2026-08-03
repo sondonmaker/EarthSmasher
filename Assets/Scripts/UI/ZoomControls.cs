@@ -15,10 +15,17 @@ public class ZoomControls : MonoBehaviour
         if (orbit == null) orbit = FindObjectOfType<OrbitCamera>();
         if (orbit == null) return;
 
+        MobileUi.Begin();
+        Draw();
+        MobileUi.End();
+    }
+
+    void Draw()
+    {
         float size = 48f;
         float gap = 10f;
-        float x = Screen.width - size - 18f;
-        float y = Screen.height - size * 2f - gap - 18f;
+        float x = MobileUi.Width - size - 18f;
+        float y = MobileUi.Height - size * 2f - gap - 18f;
 
         var prev = GUI.backgroundColor;
         GUI.backgroundColor = new Color(0.15f, 0.2f, 0.3f, 0.85f);
@@ -47,11 +54,20 @@ public class ZoomControls : MonoBehaviour
 
     static bool IsMouseInRect(Rect r)
     {
+        var touchscreen = UnityEngine.InputSystem.Touchscreen.current;
+        if (touchscreen != null)
+        {
+            for (int i = 0; i < touchscreen.touches.Count; i++)
+            {
+                var t = touchscreen.touches[i];
+                if (t.press.isPressed || t.press.wasPressedThisFrame)
+                    return r.Contains(MobileUi.ScreenToGui(t.position.ReadValue()));
+            }
+        }
+
         var mouse = UnityEngine.InputSystem.Mouse.current;
         if (mouse == null) return false;
-        Vector2 p = mouse.position.ReadValue();
-        p.y = Screen.height - p.y;
-        return r.Contains(p);
+        return r.Contains(MobileUi.ScreenToGui(mouse.position.ReadValue()));
     }
 }
 

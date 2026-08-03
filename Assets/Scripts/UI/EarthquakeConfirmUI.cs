@@ -134,6 +134,13 @@ public class EarthquakeConfirmUI : MonoBehaviour
         if (!visible)
             return;
 
+        MobileUi.Begin();
+        DrawGui();
+        MobileUi.End();
+    }
+
+    void DrawGui()
+    {
         EnsureStyles();
 
         // 다른 OnGUI보다 위에 그려서 클릭이 먹히게
@@ -142,15 +149,15 @@ public class EarthquakeConfirmUI : MonoBehaviour
         float pad = 20f;
         float rowH = 34f;
         float btnH = 44f;
-        float w = Mathf.Min(420f, Screen.width - 32f);
+        float w = Mathf.Min(420f, MobileUi.Width - 32f);
         // 헤더 + 힌트 + 4행 + reroll + gap + cancel/confirm + 여백
         float h = 12f + 32f + 40f + (rowH + 6f) * 4f + 14f + 34f + 16f + btnH + 20f;
-        h = Mathf.Min(h, Screen.height - 24f);
-        panelRect = new Rect((Screen.width - w) * 0.5f, (Screen.height - h) * 0.5f, w, h);
+        h = Mathf.Min(h, MobileUi.Height - 24f);
+        panelRect = new Rect((MobileUi.Width - w) * 0.5f, (MobileUi.Height - h) * 0.5f, w, h);
 
         Color prevGui = GUI.color;
         GUI.color = new Color(0f, 0f, 0f, 0.55f);
-        GUI.DrawTexture(new Rect(0, 0, Screen.width, Screen.height), Texture2D.whiteTexture);
+        GUI.DrawTexture(new Rect(0, 0, MobileUi.Width, MobileUi.Height), Texture2D.whiteTexture);
         GUI.color = prevGui;
 
         GUI.DrawTexture(panelRect, bg);

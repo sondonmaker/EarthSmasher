@@ -147,6 +147,13 @@ public class EarthControlPanel : MonoBehaviour
 
     void OnGUI()
     {
+        MobileUi.Begin();
+        DrawGui();
+        MobileUi.End();
+    }
+
+    void DrawGui()
+    {
         EnsureStyles();
 
         // 모달 중엔 사이드 패널만 숨김 — 카메라 잠그지 않음
@@ -787,12 +794,21 @@ public class EarthControlPanel : MonoBehaviour
 
     static bool IsMouseInRect(Rect r)
     {
+        var touchscreen = UnityEngine.InputSystem.Touchscreen.current;
+        if (touchscreen != null)
+        {
+            for (int i = 0; i < touchscreen.touches.Count; i++)
+            {
+                var t = touchscreen.touches[i];
+                if (t.press.isPressed || t.press.wasPressedThisFrame)
+                    return r.Contains(MobileUi.ScreenToGui(t.position.ReadValue()));
+            }
+        }
+
         var mouse = UnityEngine.InputSystem.Mouse.current;
         if (mouse == null)
             return false;
-        Vector2 p = mouse.position.ReadValue();
-        p.y = Screen.height - p.y;
-        return r.Contains(p);
+        return r.Contains(MobileUi.ScreenToGui(mouse.position.ReadValue()));
     }
 }
 

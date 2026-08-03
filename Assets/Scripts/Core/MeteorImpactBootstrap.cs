@@ -169,6 +169,10 @@ public class MeteorImpactBootstrap : MonoBehaviour
         earthGo.transform.position = Vector3.zero;
         earthGo.transform.localScale = Vector3.one * 5f;
 
+        // 기본 Sphere는 15°/세그먼트라 크레이터가 폴리곤보다 작다 → 고밀도로 교체.
+        // UV는 기존 배치를 역산해 그대로 따르므로 텍스처가 틀어지지 않는다.
+        EarthMeshBuilder.Upgrade(earthGo.GetComponent<MeshFilter>());
+
         var rend = earthGo.GetComponent<Renderer>();
         rend.material = EarthTextureLoader.CreateCrustMaterial(earthDayTexture, earthNightTexture);
         rend.receiveShadows = true;
@@ -197,8 +201,8 @@ public class MeteorImpactBootstrap : MonoBehaviour
         planet.SetVisualRefs(rend, core.transform);
         earthGo.AddComponent<EarthSpin>().SetSpeed(7.5f);
 
-        // HARD RULE: Unity Sphere 메시/UV 절대 리메시 금지 (교체 시 지구 전체가 투명·깨짐)
-        // 크레이터는 EarthCraterDeform이 기존 메시 복제 후 vertices만 이동
+        // 메시 교체는 여기(생성 시점) 한 번뿐. 런타임 리메시는 여전히 금지 —
+        // 크레이터는 EarthCraterDeform이 이 메시를 복제 후 vertices만 이동한다.
 
         var body = earthGo.AddComponent<EarthBodyData>();
 

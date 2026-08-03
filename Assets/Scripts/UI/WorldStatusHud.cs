@@ -26,10 +26,16 @@ public class WorldStatusHud : MonoBehaviour
     GUIStyle speedStyle;
     GUIStyle pillStyle;
     GUIStyle iconStyle;
+    GUIStyle iconButtonStyle;
+    GUIStyle iconDimStyle;
     GUIStyle alertStyle;
+    GUIStyle statusStyle;
 
     OrbitCamera orbit;
     Rect barRect;
+    string statusMsg;
+    float statusUntil;
+    bool resetRequested;
 
     public int SciencePoints
     {
@@ -52,6 +58,14 @@ public class WorldStatusHud : MonoBehaviour
 
     void Update()
     {
+        if (resetRequested)
+        {
+            resetRequested = false;
+            bool done = EarthResetSystem.ResetEarth();
+            statusMsg = done ? "EARTH RESTORED" : "EARTH NOT FOUND";
+            statusUntil = Time.unscaledTime + 2.5f;
+        }
+
         float speed = SimSpeed;
         // 인구 성장도 속도에 맞춤
         var pop = PopulationSystem.Instance;
@@ -109,6 +123,21 @@ public class WorldStatusHud : MonoBehaviour
         };
         iconStyle.normal.textColor = Color.white;
 
+        // 라벨 모양 그대로 두되 호버/눌림만 배경으로 표시
+        iconButtonStyle = new GUIStyle(iconStyle);
+        iconButtonStyle.normal.background = null;
+        iconButtonStyle.normal.textColor = Color.white;
+        iconButtonStyle.hover.background = pillBg;
+        iconButtonStyle.hover.textColor = Color.white;
+        iconButtonStyle.active.background = accentBg;
+        iconButtonStyle.active.textColor = Color.white;
+        iconButtonStyle.focused.background = null;
+        iconButtonStyle.focused.textColor = Color.white;
+
+        // 아직 기능이 없는 단축 아이콘
+        iconDimStyle = new GUIStyle(iconStyle);
+        iconDimStyle.normal.textColor = new Color(1f, 1f, 1f, 0.35f);
+
         alertStyle = new GUIStyle(GUI.skin.label)
         {
             fontSize = 12,
@@ -116,6 +145,9 @@ public class WorldStatusHud : MonoBehaviour
             alignment = TextAnchor.MiddleCenter
         };
         alertStyle.normal.textColor = new Color(1f, 0.35f, 0.2f);
+
+        statusStyle = new GUIStyle(alertStyle);
+        statusStyle.normal.textColor = new Color(0.6f, 0.85f, 1f);
     }
 
     static Texture2D MakeTex(Color c)
@@ -132,9 +164,16 @@ public class WorldStatusHud : MonoBehaviour
         if (orbit == null)
             orbit = FindObjectOfType<OrbitCamera>();
 
+        MobileUi.Begin();
+        Draw();
+        MobileUi.End();
+    }
+
+    void Draw()
+    {
         float h = 44f;
         float pad = 10f;
-        barRect = new Rect(0, 0, Screen.width, h + 8f);
+        barRect = new Rect(0, 0, MobileUi.Width, h + 8f);
         GUI.DrawTexture(barRect, barBg);
 
         float x = pad;
@@ -151,18 +190,7 @@ public class WorldStatusHud : MonoBehaviour
         x += 16f;
 
         // Center icons
-        x = DrawIconButton(x, y, rowH, "X", "Weapons", () =>
-        {
-            var rail = FindObjectOfType<WeaponRailPanel>();
-            if (rail != null)
-                rail.OpenCategory(1);
-            else
-            {
-                var panel = FindObjectOfType<EarthControlPanel>();
-                if (panel != null)
-                    panel.OpenTab(EarthControlPanel.Tab.Disaster);
-            }
-        });
+        x = DrawIconButton(x, y, rowH, "X", "Reset Earth", ResetEarthState);
         x = DrawIconButton(x, y, rowH, "O", "Recenter", () =>
         {
             var earth = FindObjectOfType<EarthPlanet>();
@@ -178,16 +206,28 @@ public class WorldStatusHud : MonoBehaviour
         x = DrawIconButton(x, y, rowH, "C", "Calendar", null);
 
         // Right pills: science then population (pop farthest right like reference)
-        float right = Screen.width - pad;
+        float right = MobileUi.Width - pad;
         right = DrawSciencePill(right, y, rowH);
         right -= 10f;
         DrawPopulationPill(right, y, rowH);
 
         var war = NuclearWarSystem.Instance;
         if (war != null && war.IsRunning)
-            GUI.Label(new Rect(0, h + 6f, Screen.width, 18f), "NUCLEAR WAR IN PROGRESS", alertStyle);
+            GUI.Label(new Rect(0, h + 6f, MobileUi.Width, 18f), "NUCLEAR WAR IN PROGRESS", alertStyle);
+        else if (!string.IsNullOrEmpty(statusMsg) && Time.unscaledTime < statusUntil)
+            GUI.Label(new Rect(0, h + 6f, MobileUi.Width, 18f), statusMsg, statusStyle);
 
         BlocksGameplay = IsMouseInRect(barRect);
+    }
+
+    /// <summary>지구 상태 초기화 요청. 실제 처리는 OnGUI 밖(Update)에서 한다.</summary>
+    void ResetEarthState()
+    {
+        resetRequested = true;
+
+        var rail = FindObjectOfType<WeaponRailPanel>();
+        if (rail != null)
+            rail.ClearArm();
     }
 
     float DrawSpeedControls(float x, float y, float h)
@@ -255,11 +295,15 @@ public class WorldStatusHud : MonoBehaviour
 
     float DrawIconButton(float x, float y, float h, string icon, string tip, Action onClick)
     {
-        Rect r = new Rect(x, y, 34f, h);
-        if (GUI.Button(r, GUIContent.none, GUIStyle.none))
-            onClick?.Invoke();
-        GUI.Label(r, icon, iconStyle);
-        return x + 38f;
+        // 손가락 탭이 빗나가지 않게 바 높이만큼 히트 영역을 넉넉히 잡는다
+        Rect r = new Rect(x, y - 4f, 36f, h + 8f);
+
+        if (onClick == null)
+            GUI.Label(r, icon, iconDimStyle);
+        else if (GUI.Button(r, icon, iconButtonStyle))
+            onClick.Invoke();
+
+        return x + 40f;
     }
 
     void DrawPopulationPill(float rightEdge, float y, float h)
@@ -321,11 +365,20 @@ public class WorldStatusHud : MonoBehaviour
 
     static bool IsMouseInRect(Rect r)
     {
+        var touchscreen = UnityEngine.InputSystem.Touchscreen.current;
+        if (touchscreen != null)
+        {
+            for (int i = 0; i < touchscreen.touches.Count; i++)
+            {
+                var t = touchscreen.touches[i];
+                if (t.press.isPressed || t.press.wasPressedThisFrame)
+                    return r.Contains(MobileUi.ScreenToGui(t.position.ReadValue()));
+            }
+        }
+
         var mouse = UnityEngine.InputSystem.Mouse.current;
         if (mouse == null)
             return false;
-        Vector2 p = mouse.position.ReadValue();
-        p.y = Screen.height - p.y;
-        return r.Contains(p);
+        return r.Contains(MobileUi.ScreenToGui(mouse.position.ReadValue()));
     }
 }

@@ -20,20 +20,15 @@ public static class RuntimeMaterial
     public static Material UnlitTransparent(Color color)
     {
         // 트레일/링용 — 항상 스프라이트 언릿
-        var shader = Shader.Find("Sprites/Default");
-        if (shader == null) shader = PickShader(true);
-        var mat = new Material(shader);
+        var mat = new Material(EarthTextureLoader.SafeShader("Sprites/Default"));
         mat.color = color;
         return mat;
     }
 
     static Shader PickShader(bool preferTransparent)
     {
-        var urp = Shader.Find("Universal Render Pipeline/Lit");
-        if (urp != null) return urp;
-        var std = Shader.Find("Standard");
-        if (std != null) return std;
-        return Shader.Find("Sprites/Default");
+        return EarthTextureLoader.SafeShader(
+            "Universal Render Pipeline/Lit", "Standard", "Sprites/Default");
     }
 
     static void ApplyColor(Material mat, Color color)

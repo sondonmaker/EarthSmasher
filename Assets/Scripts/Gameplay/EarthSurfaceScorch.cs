@@ -9,6 +9,7 @@ public class EarthSurfaceScorch : MonoBehaviour
     [SerializeField] int paintResolution = 1024;
 
     Texture2D working;
+    Texture sourceTex;
     Color32[] pixels;
     bool dirty;
     int dirtyFrames;
@@ -64,6 +65,8 @@ public class EarthSurfaceScorch : MonoBehaviour
         Texture src = mat.mainTexture;
         if (src == null)
             src = EarthTextureLoader.Day;
+        // 초기화 때 다시 읽어야 하므로 원본 참조를 남긴다 (픽셀 사본은 메모리가 커서 보관하지 않음)
+        sourceTex = src;
 
         int w = paintResolution;
         int h = paintResolution;
@@ -93,7 +96,25 @@ public class EarthSurfaceScorch : MonoBehaviour
         working.wrapMode = TextureWrapMode.Repeat;
         working.filterMode = FilterMode.Bilinear;
 
-        if (src is Texture2D src2d && src2d.isReadable)
+        LoadBasePixels();
+
+        working.SetPixels32(pixels);
+        working.Apply(false);
+        mat.mainTexture = working;
+        if (mat.HasProperty("_BaseMap"))
+            mat.SetTexture("_BaseMap", working);
+    }
+
+    /// <summary>원본 지표 텍스처를 pixels 버퍼에 다시 채운다.</summary>
+    void LoadBasePixels()
+    {
+        if (working == null)
+            return;
+
+        int w = working.width;
+        int h = working.height;
+
+        if (sourceTex is Texture2D src2d && src2d.isReadable)
         {
             // blit via GetPixels if same size, else scale sample
             if (src2d.width == w && src2d.height == h)
@@ -114,9 +135,8 @@ public class EarthSurfaceScorch : MonoBehaviour
         else
         {
             // GPU copy fallback when source isn't readable
-            pixels = new Color32[w * h];
             var rt = RenderTexture.GetTemporary(w, h, 0, RenderTextureFormat.ARGB32);
-            Graphics.Blit(src != null ? src : Texture2D.blackTexture, rt);
+            Graphics.Blit(sourceTex != null ? sourceTex : Texture2D.blackTexture, rt);
             var prev = RenderTexture.active;
             RenderTexture.active = rt;
             working.ReadPixels(new Rect(0, 0, w, h), 0, 0, false);
@@ -125,12 +145,20 @@ public class EarthSurfaceScorch : MonoBehaviour
             RenderTexture.ReleaseTemporary(rt);
             pixels = working.GetPixels32();
         }
+    }
 
+    /// <summary>태운 자국·균열·크레이터 자국을 지우고 원래 지표로 되돌린다.</summary>
+    public void RestoreSurface()
+    {
+        EnsureWorkingTexture();
+        if (working == null)
+            return;
+
+        LoadBasePixels();
         working.SetPixels32(pixels);
         working.Apply(false);
-        mat.mainTexture = working;
-        if (mat.HasProperty("_BaseMap"))
-            mat.SetTexture("_BaseMap", working);
+        dirty = false;
+        dirtyFrames = 0;
     }
 
     /// <summary>
