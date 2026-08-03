@@ -1,4 +1,5 @@
 using System.Collections;
+using System.Collections.Generic;
 using UnityEngine;
 
 public enum SpacecraftKind
@@ -11,10 +12,13 @@ public enum SpacecraftKind
     VonNeumannProbe
 }
 
-/// <summary>4번 메뉴: 우주선 소환 (궤도에 띄우고 간단한 연출).</summary>
+/// <summary>4번 메뉴: 우주선 소환.</summary>
 public class SpacecraftFleetSystem : MonoBehaviour
 {
     public static SpacecraftFleetSystem Instance { get; private set; }
+
+    static readonly List<FleetUfo> LiveUfos = new List<FleetUfo>();
+    static readonly List<FleetBattleship> LiveBattleships = new List<FleetBattleship>();
 
     [SerializeField] EarthPlanet earth;
     [SerializeField] Camera cam;
@@ -27,6 +31,45 @@ public class SpacecraftFleetSystem : MonoBehaviour
         if (s != null)
             return s;
         return new GameObject("SpacecraftFleetSystem").AddComponent<SpacecraftFleetSystem>();
+    }
+
+    public static void RegisterUfo(FleetUfo ufo)
+    {
+        if (ufo != null && !LiveUfos.Contains(ufo))
+            LiveUfos.Add(ufo);
+    }
+
+    public static void UnregisterUfo(FleetUfo ufo)
+    {
+        LiveUfos.Remove(ufo);
+    }
+
+    public static void RegisterBattleship(FleetBattleship ship)
+    {
+        if (ship != null && !LiveBattleships.Contains(ship))
+            LiveBattleships.Add(ship);
+    }
+
+    public static void UnregisterBattleship(FleetBattleship ship)
+    {
+        LiveBattleships.Remove(ship);
+    }
+
+    public static FleetUfo FindNearestUfo(Vector3 from)
+    {
+        LiveUfos.RemoveAll(u => u == null);
+        FleetUfo best = null;
+        float bestSq = float.MaxValue;
+        for (int i = 0; i < LiveUfos.Count; i++)
+        {
+            float sq = (LiveUfos[i].transform.position - from).sqrMagnitude;
+            if (sq < bestSq)
+            {
+                bestSq = sq;
+                best = LiveUfos[i];
+            }
+        }
+        return best;
     }
 
     void Awake()
@@ -81,7 +124,7 @@ public class SpacecraftFleetSystem : MonoBehaviour
         switch (kind)
         {
             case SpacecraftKind.Ufo:
-                yield return SummonUfo();
+                SummonUfo();
                 break;
             case SpacecraftKind.OrbitalCannon:
                 yield return SummonOrbitalCannon();
@@ -90,7 +133,7 @@ public class SpacecraftFleetSystem : MonoBehaviour
                 yield return SummonFighterWing();
                 break;
             case SpacecraftKind.Battleship:
-                yield return SummonBattleship();
+                SummonBattleship();
                 break;
             case SpacecraftKind.PlanetKiller:
                 yield return SummonPlanetKiller();
@@ -101,6 +144,7 @@ public class SpacecraftFleetSystem : MonoBehaviour
         }
         hasAimOverride = false;
         IsBusy = false;
+        yield break;
     }
 
     Vector3 FaceDir()
@@ -123,7 +167,7 @@ public class SpacecraftFleetSystem : MonoBehaviour
         return earth.transform.position + p * (earth.Radius * altitudeMul);
     }
 
-    static GameObject Prim(PrimitiveType type, string name, Vector3 pos, Vector3 scale, Color color, float emission = 0.4f)
+    public static GameObject Prim(PrimitiveType type, string name, Vector3 pos, Vector3 scale, Color color, float emission = 0.4f)
     {
         var go = GameObject.CreatePrimitive(type);
         go.name = name;
@@ -136,62 +180,76 @@ public class SpacecraftFleetSystem : MonoBehaviour
         return go;
     }
 
-    IEnumerator OrbitSpin(Transform tf, Vector3 center, Vector3 axis, float degPerSec, float life, System.Action onTick = null)
-    {
-        float t = 0f;
-        while (t < life && tf != null)
-        {
-            t += Time.deltaTime;
-            tf.RotateAround(center, axis, degPerSec * Time.deltaTime);
-            onTick?.Invoke();
-            yield return null;
-        }
-    }
-
-    IEnumerator SummonUfo()
-    {
-        Vector3 dir = FaceDir();
-        var ufo = Prim(PrimitiveType.Sphere, "UFO", OrbitPos(dir, 1.55f), new Vector3(0.55f, 0.12f, 0.55f),
-            new Color(0.75f, 0.85f, 0.95f), 1.2f);
-        var dome = Prim(PrimitiveType.Sphere, "Dome", ufo.transform.position + Vector3.up * 0.06f,
-            new Vector3(0.28f, 0.18f, 0.28f), new Color(0.4f, 1f, 0.7f), 2f);
-        dome.transform.SetParent(ufo.transform, true);
-
-        // tractor beam
-        var beam = Prim(PrimitiveType.Cylinder, "Beam", ufo.transform.position,
-            new Vector3(0.08f, earth.Radius * 0.35f, 0.08f), new Color(0.3f, 1f, 0.5f, 1f), 2.5f);
-        beam.transform.SetParent(ufo.transform, true);
-        AlignBeam(beam.transform, ufo.transform.position, earth.transform.position);
-
-        Vector3 axis = Vector3.Cross(dir, Vector3.up).normalized;
-        if (axis.sqrMagnitude < 1e-4f)
-            axis = Vector3.right;
-
-        float life = 7f;
-        float t = 0f;
-        while (t < life)
-        {
-            t += Time.deltaTime;
-            ufo.transform.RotateAround(earth.transform.position, axis, 28f * Time.deltaTime);
-            AlignBeam(beam.transform, ufo.transform.position, earth.transform.position);
-            if (Time.frameCount % 12 == 0)
-                EarthCraterDeform.Ensure(earth)?.Dig(earth.transform.position +
-                    (ufo.transform.position - earth.transform.position).normalized * earth.Radius, 0.06f, 0.02f, false);
-            yield return null;
-        }
-
-        Object.Destroy(ufo);
-    }
-
-    static void AlignBeam(Transform beam, Vector3 from, Vector3 to)
+    public static void AlignBeam(Transform beam, Vector3 from, Vector3 to)
     {
         Vector3 mid = (from + to) * 0.5f;
         float len = Vector3.Distance(from, to) * 0.5f;
         beam.position = mid;
         beam.up = (from - to).normalized;
         var s = beam.localScale;
-        s.y = len;
+        s.y = Mathf.Max(0.01f, len);
         beam.localScale = s;
+    }
+
+    public static IEnumerator FireLaser(Vector3 from, Vector3 to, Color color, float life)
+    {
+        var beam = Prim(PrimitiveType.Cylinder, "Laser", from, Vector3.one, color, 3f);
+        AlignBeam(beam.transform, from, to);
+        float t = 0f;
+        while (t < life && beam != null)
+        {
+            t += Time.deltaTime;
+            AlignBeam(beam.transform, from, to);
+            float a = 1f - t / life;
+            var r = beam.GetComponent<Renderer>();
+            if (r != null && r.material != null)
+            {
+                var c = color;
+                c.a = a;
+                if (r.material.HasProperty("_Color"))
+                    r.material.SetColor("_Color", c);
+            }
+            yield return null;
+        }
+        if (beam != null)
+            Object.Destroy(beam);
+    }
+
+    void SummonUfo()
+    {
+        Vector3 dir = FaceDir();
+        Vector3 pos = OrbitPos(dir, 1.55f);
+        var ufo = Prim(PrimitiveType.Sphere, "UFO", pos, new Vector3(0.55f, 0.12f, 0.55f),
+            new Color(0.75f, 0.85f, 0.95f), 1.2f);
+        var dome = Prim(PrimitiveType.Sphere, "Dome", pos + Vector3.up * 0.06f,
+            new Vector3(0.28f, 0.18f, 0.28f), new Color(0.4f, 1f, 0.7f), 2f);
+        dome.transform.SetParent(ufo.transform, true);
+
+        var beam = Prim(PrimitiveType.Cylinder, "Beam", pos,
+            new Vector3(0.08f, earth.Radius * 0.35f, 0.08f), new Color(0.3f, 1f, 0.5f, 1f), 2.5f);
+        beam.transform.SetParent(ufo.transform, true);
+
+        var ctrl = ufo.AddComponent<FleetUfo>();
+        ctrl.Init(earth, dir, beam.transform);
+    }
+
+    void SummonBattleship()
+    {
+        Vector3 dir = FaceDir();
+        Vector3 pos = OrbitPos(dir, 1.85f);
+        var ship = Prim(PrimitiveType.Cube, "Battleship", pos, new Vector3(1.4f, 0.28f, 0.45f),
+            new Color(0.25f, 0.28f, 0.32f), 0.2f);
+        Vector3 tangent = Vector3.Cross(dir, Vector3.up);
+        if (tangent.sqrMagnitude < 1e-4f)
+            tangent = Vector3.Cross(dir, Vector3.right);
+        ship.transform.rotation = Quaternion.LookRotation(tangent.normalized, dir);
+
+        var bridge = Prim(PrimitiveType.Cube, "Bridge", pos + dir * 0.12f,
+            new Vector3(0.35f, 0.18f, 0.22f), new Color(0.4f, 0.45f, 0.5f), 0.5f);
+        bridge.transform.SetParent(ship.transform, true);
+
+        var ctrl = ship.AddComponent<FleetBattleship>();
+        ctrl.Init(earth, pos, dir);
     }
 
     IEnumerator SummonOrbitalCannon()
@@ -205,7 +263,7 @@ public class SpacecraftFleetSystem : MonoBehaviour
         float life = 8f;
         float t = 0f;
         float nextShot = 0.6f;
-        while (t < life)
+        while (t < life && gun != null)
         {
             t += Time.deltaTime;
             gun.transform.RotateAround(earth.transform.position, Vector3.up, 12f * Time.deltaTime);
@@ -222,29 +280,8 @@ public class SpacecraftFleetSystem : MonoBehaviour
             yield return null;
         }
 
-        Object.Destroy(gun);
-    }
-
-    IEnumerator FireLaser(Vector3 from, Vector3 to, Color color, float life)
-    {
-        var beam = Prim(PrimitiveType.Cylinder, "Laser", from, Vector3.one, color, 3f);
-        AlignBeam(beam.transform, from, to);
-        float t = 0f;
-        while (t < life)
-        {
-            t += Time.deltaTime;
-            float a = 1f - t / life;
-            var r = beam.GetComponent<Renderer>();
-            if (r != null && r.material != null)
-            {
-                var c = color;
-                c.a = a;
-                if (r.material.HasProperty("_Color"))
-                    r.material.SetColor("_Color", c);
-            }
-            yield return null;
-        }
-        Object.Destroy(beam);
+        if (gun != null)
+            Object.Destroy(gun);
     }
 
     IEnumerator SummonFighterWing()
@@ -252,23 +289,21 @@ public class SpacecraftFleetSystem : MonoBehaviour
         Vector3 dir = FaceDir();
         var root = new GameObject("FighterWing");
         root.transform.position = earth.transform.position;
-        var fighters = new Transform[6];
-        for (int i = 0; i < fighters.Length; i++)
+        for (int i = 0; i < 6; i++)
         {
-            float ang = i / (float)fighters.Length * Mathf.PI * 2f;
+            float ang = i / 6f * Mathf.PI * 2f;
             Vector3 side = new Vector3(Mathf.Cos(ang), 0.15f * Mathf.Sin(ang * 2f), Mathf.Sin(ang));
             Vector3 p = OrbitPos((dir + side * 0.4f).normalized, 1.45f + (i % 3) * 0.08f);
             var f = Prim(PrimitiveType.Cube, "Fighter", p, new Vector3(0.12f, 0.04f, 0.22f),
                 new Color(0.9f, 0.55f, 0.2f), 0.8f);
             f.transform.SetParent(root.transform, true);
             f.transform.rotation = Quaternion.LookRotation(earth.transform.position - p);
-            fighters[i] = f.transform;
         }
 
         float life = 7f;
         float t = 0f;
         float nextPass = 0.8f;
-        while (t < life)
+        while (t < life && root != null)
         {
             t += Time.deltaTime;
             root.transform.Rotate(Vector3.up, 40f * Time.deltaTime, Space.World);
@@ -282,43 +317,8 @@ public class SpacecraftFleetSystem : MonoBehaviour
             yield return null;
         }
 
-        Object.Destroy(root);
-    }
-
-    IEnumerator SummonBattleship()
-    {
-        Vector3 dir = FaceDir();
-        Vector3 pos = OrbitPos(dir, 1.85f);
-        var ship = Prim(PrimitiveType.Cube, "Battleship", pos, new Vector3(1.4f, 0.28f, 0.45f),
-            new Color(0.25f, 0.28f, 0.32f), 0.2f);
-        ship.transform.rotation = Quaternion.LookRotation(Vector3.Cross(dir, Vector3.up));
-
-        var bridge = Prim(PrimitiveType.Cube, "Bridge", pos + Vector3.up * 0.18f,
-            new Vector3(0.35f, 0.18f, 0.22f), new Color(0.4f, 0.45f, 0.5f), 0.5f);
-        bridge.transform.SetParent(ship.transform, true);
-
-        float life = 9f;
-        float t = 0f;
-        float next = 1f;
-        Vector3 axis = Vector3.up;
-        while (t < life)
-        {
-            t += Time.deltaTime;
-            ship.transform.RotateAround(earth.transform.position, axis, 10f * Time.deltaTime);
-            if (t >= next)
-            {
-                next = t + 1.4f;
-                Vector3 hitDir = (earth.transform.position - ship.transform.position).normalized * -1f;
-                // toward earth
-                hitDir = (ship.transform.position - earth.transform.position).normalized;
-                Vector3 hit = earth.transform.position + hitDir * earth.Radius;
-                StartCoroutine(FireLaser(ship.transform.position, hit, new Color(1f, 0.8f, 0.2f), 0.4f));
-                NuclearBlast.Play(earth, hit, hitDir, 1.0f);
-            }
-            yield return null;
-        }
-
-        Object.Destroy(ship);
+        if (root != null)
+            Object.Destroy(root);
     }
 
     IEnumerator SummonPlanetKiller()
@@ -331,16 +331,18 @@ public class SpacecraftFleetSystem : MonoBehaviour
             Vector3.one * 0.35f, new Color(1f, 0.2f, 0.05f), 3f);
         muzzle.transform.SetParent(ship.transform, true);
 
-        // charge then fire
         float charge = 2.2f;
         float t = 0f;
-        while (t < charge)
+        while (t < charge && ship != null)
         {
             t += Time.deltaTime;
             float pulse = 0.35f + 0.15f * Mathf.Sin(t * 12f);
             muzzle.transform.localScale = Vector3.one * pulse;
             yield return null;
         }
+
+        if (ship == null)
+            yield break;
 
         Vector3 hitDir = (ship.transform.position - earth.transform.position).normalized;
         Vector3 hit = earth.transform.position + hitDir * earth.Radius;
@@ -350,7 +352,8 @@ public class SpacecraftFleetSystem : MonoBehaviour
         CameraShake.Shake(0.25f, 0.45f);
 
         yield return new WaitForSecondsRealtime(2.5f);
-        Object.Destroy(ship);
+        if (ship != null)
+            Object.Destroy(ship);
     }
 
     IEnumerator SummonVonNeumann()
@@ -370,7 +373,7 @@ public class SpacecraftFleetSystem : MonoBehaviour
 
         float life = 8f;
         float t = 0f;
-        while (t < life)
+        while (t < life && root != null)
         {
             t += Time.deltaTime;
             for (int i = 0; i < probes.Length; i++)
@@ -391,6 +394,171 @@ public class SpacecraftFleetSystem : MonoBehaviour
             yield return null;
         }
 
-        Object.Destroy(root);
+        if (root != null)
+            Object.Destroy(root);
+    }
+}
+
+/// <summary>장시간 체공. UFO 우선 공격, 없으면 지구에 핵급 임팩트.</summary>
+public class FleetBattleship : MonoBehaviour
+{
+    EarthPlanet earth;
+    Vector3 holdPos;
+    Vector3 holdDir;
+    float life = 120f;
+    float age;
+    float nextShot = 1.2f;
+    float shotInterval = 1.6f;
+
+    public void Init(EarthPlanet planet, Vector3 pos, Vector3 dir)
+    {
+        earth = planet;
+        holdPos = pos;
+        holdDir = dir.normalized;
+        SpacecraftFleetSystem.RegisterBattleship(this);
+    }
+
+    void OnDestroy()
+    {
+        SpacecraftFleetSystem.UnregisterBattleship(this);
+    }
+
+    void Update()
+    {
+        if (earth == null)
+        {
+            Destroy(gameObject);
+            return;
+        }
+
+        age += Time.deltaTime;
+        if (age >= life)
+        {
+            Destroy(gameObject);
+            return;
+        }
+
+        // 소환 지점 근처에 오래 머무름 (살짝만 흔들림)
+        float bob = Mathf.Sin(age * 0.7f) * (earth.Radius * 0.03f);
+        Vector3 side = Vector3.Cross(holdDir, Vector3.up);
+        if (side.sqrMagnitude < 1e-4f)
+            side = Vector3.Cross(holdDir, Vector3.right);
+        side.Normalize();
+        Vector3 target = holdPos + side * (Mathf.Sin(age * 0.35f) * earth.Radius * 0.08f) + holdDir * bob;
+        transform.position = Vector3.Lerp(transform.position, target, Time.deltaTime * 1.5f);
+
+        FleetUfo ufo = SpacecraftFleetSystem.FindNearestUfo(transform.position);
+        Vector3 aimPoint;
+        if (ufo != null)
+            aimPoint = ufo.transform.position;
+        else
+        {
+            // 지구 표면 (홀드 방향 부근 + 약간의 랜덤)
+            Vector3 hitDir = (holdDir + Random.insideUnitSphere * 0.12f).normalized;
+            aimPoint = earth.transform.position + hitDir * earth.Radius;
+        }
+
+        Vector3 look = (aimPoint - transform.position).normalized;
+        if (look.sqrMagnitude > 1e-6f)
+        {
+            Quaternion want = Quaternion.LookRotation(look, holdDir);
+            transform.rotation = Quaternion.Slerp(transform.rotation, want, Time.deltaTime * 2.5f);
+        }
+
+        if (age < nextShot)
+            return;
+        nextShot = age + shotInterval;
+
+        StartCoroutine(SpacecraftFleetSystem.FireLaser(
+            transform.position, aimPoint, new Color(1f, 0.75f, 0.15f), 0.35f));
+
+        if (ufo != null)
+        {
+            ufo.TakeHit(1f, transform.position);
+        }
+        else
+        {
+            Vector3 hitDir = (aimPoint - earth.transform.position).normalized;
+            // 핵폭탄급 임팩트
+            NuclearBlast.Play(earth, aimPoint, hitDir, 1.25f);
+            EarthCraterDeform.Ensure(earth)?.Dig(aimPoint, 0.12f, 0.07f, false);
+            EarthSurfaceScorch.Ensure(earth)?.BurnAt(aimPoint, 0.04f, 0.8f);
+            CameraShake.Shake(0.1f, 0.18f);
+        }
+    }
+}
+
+/// <summary>궤도 UFO. 배틀쉽에 맞으면 파괴.</summary>
+public class FleetUfo : MonoBehaviour
+{
+    EarthPlanet earth;
+    Transform beam;
+    Vector3 orbitAxis;
+    float hp = 4f;
+    float life = 90f;
+    float age;
+
+    public void Init(EarthPlanet planet, Vector3 faceDir, Transform tractorBeam)
+    {
+        earth = planet;
+        beam = tractorBeam;
+        orbitAxis = Vector3.Cross(faceDir, Vector3.up);
+        if (orbitAxis.sqrMagnitude < 1e-4f)
+            orbitAxis = Vector3.right;
+        orbitAxis.Normalize();
+        SpacecraftFleetSystem.RegisterUfo(this);
+    }
+
+    void OnDestroy()
+    {
+        SpacecraftFleetSystem.UnregisterUfo(this);
+    }
+
+    public void TakeHit(float damage, Vector3 from)
+    {
+        hp -= damage;
+        // 피격 플래시
+        var rend = GetComponent<Renderer>();
+        if (rend != null)
+            rend.material = RuntimeMaterial.Opaque(new Color(1f, 0.4f, 0.3f), 2f);
+
+        if (hp > 0f)
+            return;
+
+        // 격추 폭발
+        if (earth != null)
+        {
+            Vector3 n = (transform.position - earth.transform.position).normalized;
+            NuclearBlast.Play(earth, transform.position, n, 0.6f);
+        }
+        CameraShake.Shake(0.12f, 0.2f);
+        Destroy(gameObject);
+    }
+
+    void Update()
+    {
+        if (earth == null)
+        {
+            Destroy(gameObject);
+            return;
+        }
+
+        age += Time.deltaTime;
+        if (age >= life)
+        {
+            Destroy(gameObject);
+            return;
+        }
+
+        transform.RotateAround(earth.transform.position, orbitAxis, 22f * Time.deltaTime);
+        if (beam != null)
+            SpacecraftFleetSystem.AlignBeam(beam, transform.position, earth.transform.position);
+
+        if (Time.frameCount % 14 == 0)
+        {
+            Vector3 hit = earth.transform.position +
+                (transform.position - earth.transform.position).normalized * earth.Radius;
+            EarthCraterDeform.Ensure(earth)?.Dig(hit, 0.05f, 0.018f, false);
+        }
     }
 }
