@@ -161,54 +161,43 @@ public class LaserStrikeSystem : MonoBehaviour
     {
         Vector3 center = earth.transform.position;
         Vector3 antipode = center - normal * earth.Radius;
-        Vector3 origin = point + normal * (earth.Radius * 3.2f);
-        Vector3 exit = antipode - normal * (earth.Radius * 0.8f);
+        Vector3 origin = point + normal * (earth.Radius * 3.5f);
+        Vector3 exitBeyond = antipode - normal * (earth.Radius * 1.2f);
 
-        Color col = new Color(1f, 0.95f, 0.6f);
-        var beam = MakeBeam("PierceLaser", origin, exit, col, 0.22f);
-        CameraShake.Shake(0.2f, 0.35f);
+        Color col = new Color(1f, 0.92f, 0.45f);
+        var beam = MakeBeam("PierceLaser", origin, exitBeyond, col, 0.28f);
+        CameraShake.Shake(0.22f, 0.4f);
 
         float t = 0f;
-        const float hold = 2.4f;
-        int steps = 0;
+        const float hold = 2.6f;
         while (t < hold)
         {
             t += Time.deltaTime;
             float u = Mathf.Clamp01(t / hold);
-            float w = Mathf.Lerp(0.12f, 0.32f, u);
-            AlignBeam(beam.transform, origin, exit, w);
+            float w = Mathf.Lerp(0.16f, 0.4f, u);
+            AlignBeam(beam.transform, origin, exitBeyond, w);
 
-            if (Time.frameCount % 3 == 0)
+            if (Time.frameCount % 2 == 0)
             {
-                steps++;
-                // 입구
-                EarthCraterDeform.Ensure(earth)?.DrillBore(point, Mathf.Lerp(0.12f, 0.28f, u), Mathf.Lerp(0.08f, 0.26f, u), Mathf.Lerp(0.3f, 0.18f, u));
-                // 출구(반대쪽)
-                EarthCraterDeform.Ensure(earth)?.DrillBore(antipode, Mathf.Lerp(0.1f, 0.26f, u), Mathf.Lerp(0.07f, 0.24f, u), Mathf.Lerp(0.3f, 0.18f, u));
-                // 중간축 몇 점 — 터널감
-                for (int i = 1; i <= 3; i++)
-                {
-                    float a = i / 4f;
-                    Vector3 mid = Vector3.Lerp(point, antipode, a);
-                    EarthCraterDeform.Ensure(earth)?.DrillBore(mid, 0.1f * u, 0.12f * u, 0.2f);
-                }
-
-                EarthSurfaceScorch.Ensure(earth)?.BurnAt(point, 0.08f * u, 0.95f);
-                EarthSurfaceScorch.Ensure(earth)?.BurnAt(antipode, 0.08f * u, 0.95f);
+                // 입/출구를 점점 크게 파고 용암 자국
+                float rad = Mathf.Lerp(0.14f, 0.34f, u);
+                float depth = Mathf.Lerp(0.1f, 0.28f, u);
+                EarthCraterDeform.Ensure(earth)?.DrillBore(point, rad, depth, 0.18f);
+                EarthCraterDeform.Ensure(earth)?.DrillBore(antipode, rad, depth, 0.18f);
+                EarthSurfaceScorch.Ensure(earth)?.BurnAt(point, 0.1f * u, 0.98f);
+                EarthSurfaceScorch.Ensure(earth)?.BurnAt(antipode, 0.1f * u, 0.98f);
             }
             yield return null;
         }
 
-        // 최종 관통
-        EarthCraterDeform.Ensure(earth)?.DrillBore(point, 0.3f, 0.28f, 0.18f);
-        EarthCraterDeform.Ensure(earth)?.DrillBore(antipode, 0.3f, 0.28f, 0.18f);
-        var core = earth.transform.Find("Core");
-        if (core != null)
-            core.gameObject.SetActive(true);
-
-        CameraShake.Shake(0.28f, 0.4f);
         if (beam != null)
             Destroy(beam);
+
+        // 실제 관통 구멍: 셰이더 clip + 용암 터널 → 반대쪽이 보임
+        float holeR = earth.Radius * 0.18f;
+        EarthPierceHole.Ensure(earth)?.AddPierce(point, antipode, holeR);
+
+        CameraShake.Shake(0.32f, 0.45f);
     }
 
     IEnumerator LightningBurst(Vector3 point, Vector3 normal)

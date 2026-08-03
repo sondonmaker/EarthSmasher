@@ -10,6 +10,19 @@ Shader "EarthSmasher/EarthFromSpace"
         _Terminator ("Terminator Softness", Range(0.05, 0.8)) = 0.22
         _NightIntensity ("Night Lights", Range(0, 3)) = 1.0
         _AmbientFloor ("Ambient Floor", Range(0, 0.2)) = 0.05
+        _PierceCount ("Pierce Count", Int) = 0
+        _PierceOrigin0 ("Pierce Origin 0", Vector) = (0,0,0,0)
+        _PierceAxis0 ("Pierce Axis 0", Vector) = (0,1,0,0)
+        _PierceRadius0 ("Pierce Radius 0", Float) = 0
+        _PierceOrigin1 ("Pierce Origin 1", Vector) = (0,0,0,0)
+        _PierceAxis1 ("Pierce Axis 1", Vector) = (0,1,0,0)
+        _PierceRadius1 ("Pierce Radius 1", Float) = 0
+        _PierceOrigin2 ("Pierce Origin 2", Vector) = (0,0,0,0)
+        _PierceAxis2 ("Pierce Axis 2", Vector) = (0,1,0,0)
+        _PierceRadius2 ("Pierce Radius 2", Float) = 0
+        _PierceOrigin3 ("Pierce Origin 3", Vector) = (0,0,0,0)
+        _PierceAxis3 ("Pierce Axis 3", Vector) = (0,1,0,0)
+        _PierceRadius3 ("Pierce Radius 3", Float) = 0
     }
 
     SubShader
@@ -21,7 +34,7 @@ Shader "EarthSmasher/EarthFromSpace"
         {
             Name "EARTH"
             Tags { "LightMode" = "ForwardBase" }
-            Cull Back
+            Cull Off
             ZWrite On
 
             CGPROGRAM
@@ -40,6 +53,19 @@ Shader "EarthSmasher/EarthFromSpace"
             float _Terminator;
             float _NightIntensity;
             float _AmbientFloor;
+            int _PierceCount;
+            float4 _PierceOrigin0;
+            float4 _PierceAxis0;
+            float _PierceRadius0;
+            float4 _PierceOrigin1;
+            float4 _PierceAxis1;
+            float _PierceRadius1;
+            float4 _PierceOrigin2;
+            float4 _PierceAxis2;
+            float _PierceRadius2;
+            float4 _PierceOrigin3;
+            float4 _PierceAxis3;
+            float _PierceRadius3;
 
             struct appdata
             {
@@ -53,7 +79,26 @@ Shader "EarthSmasher/EarthFromSpace"
                 float4 pos : SV_POSITION;
                 float2 uv : TEXCOORD0;
                 float3 worldNormal : TEXCOORD1;
+                float3 worldPos : TEXCOORD2;
             };
+
+            float DistToAxis(float3 worldPos, float3 origin, float3 axis)
+            {
+                float3 pa = worldPos - origin;
+                float3 ax = normalize(axis);
+                float3 closest = origin + ax * dot(pa, ax);
+                return length(worldPos - closest);
+            }
+
+            bool InPierceHole(float3 worldPos)
+            {
+                if (_PierceCount < 1) return false;
+                if (_PierceCount > 0 && DistToAxis(worldPos, _PierceOrigin0.xyz, _PierceAxis0.xyz) < _PierceRadius0) return true;
+                if (_PierceCount > 1 && DistToAxis(worldPos, _PierceOrigin1.xyz, _PierceAxis1.xyz) < _PierceRadius1) return true;
+                if (_PierceCount > 2 && DistToAxis(worldPos, _PierceOrigin2.xyz, _PierceAxis2.xyz) < _PierceRadius2) return true;
+                if (_PierceCount > 3 && DistToAxis(worldPos, _PierceOrigin3.xyz, _PierceAxis3.xyz) < _PierceRadius3) return true;
+                return false;
+            }
 
             v2f vert(appdata v)
             {
@@ -61,12 +106,15 @@ Shader "EarthSmasher/EarthFromSpace"
                 o.pos = UnityObjectToClipPos(v.vertex);
                 o.uv = TRANSFORM_TEX(v.uv, _MainTex);
                 o.worldNormal = UnityObjectToWorldNormal(v.normal);
+                o.worldPos = mul(unity_ObjectToWorld, v.vertex).xyz;
                 return o;
             }
 
             fixed4 frag(v2f i) : SV_Target
             {
-                // day 맵에 이미 바다/대륙 포함 — 별도 water 덮어쓰기 없음
+                if (InPierceHole(i.worldPos))
+                    clip(-1);
+
                 float3 day = tex2D(_MainTex, i.uv).rgb * _Color.rgb;
                 day = saturate(pow(max(day, 1e-4), _Contrast) * _Exposure);
 
