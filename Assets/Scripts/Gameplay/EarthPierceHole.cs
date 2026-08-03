@@ -2,8 +2,7 @@ using System.Collections.Generic;
 using UnityEngine;
 
 /// <summary>
-/// 피어싱 레이저 구멍: 셰이더 clip으로 반대쪽이 보이게.
-/// (노란 용암 메시/림 없음)
+/// 피어싱 레이저: 원통형으로 깔끔히 뚫림 + 가장자리 용암은 셰이더 처리.
 /// </summary>
 public class EarthPierceHole : MonoBehaviour
 {
@@ -53,7 +52,8 @@ public class EarthPierceHole : MonoBehaviour
         while (holes.Count >= MaxHoles)
             holes.RemoveAt(0);
 
-        float r = Mathf.Max(radiusWorld, earth.Radius * 0.12f);
+        // 레이저 굵기와 맞는 깔끔한 원통 구멍
+        float r = Mathf.Clamp(radiusWorld, earth.Radius * 0.1f, earth.Radius * 0.28f);
         holes.Add(new Hole
         {
             origin = center,
@@ -62,15 +62,9 @@ public class EarthPierceHole : MonoBehaviour
         });
         PushToShader();
 
-        var deform = EarthCraterDeform.Ensure(earth);
-        if (deform != null)
-        {
-            deform.DrillBore(entryWorld, 0.32f, 0.28f, 0.18f);
-            deform.DrillBore(exitWorld, 0.32f, 0.28f, 0.18f);
-        }
-        // 검게 그을린 자국만 (노란 메시 없음)
-        EarthSurfaceScorch.Ensure(earth)?.BurnAt(entryWorld, 0.14f, 0.95f);
-        EarthSurfaceScorch.Ensure(earth)?.BurnAt(exitWorld, 0.14f, 0.95f);
+        // 표면 그을림만 (노란 메시 없음)
+        EarthSurfaceScorch.Ensure(earth)?.BurnAt(entryWorld, r / earth.Radius * 1.1f, 0.92f);
+        EarthSurfaceScorch.Ensure(earth)?.BurnAt(exitWorld, r / earth.Radius * 1.1f, 0.92f);
 
         var core = earth.transform.Find("Core");
         if (core != null)
@@ -83,7 +77,8 @@ public class EarthPierceHole : MonoBehaviour
         {
             var ch = earth.transform.GetChild(i);
             string n = ch.name;
-            if (n == "PierceLavaTunnel" || n == "PierceLavaRim" || n == "LavaPit" || n == "LavaBit")
+            if (n.StartsWith("PierceLava") || n == "LavaPit" || n == "LavaBit"
+                || n == "PierceBeamCore" || n == "PierceBeamGlow" || n == "PierceBeamOuter")
                 Object.Destroy(ch.gameObject);
         }
     }
@@ -96,6 +91,11 @@ public class EarthPierceHole : MonoBehaviour
             return;
 
         crustMat.SetInt("_PierceCount", holes.Count);
+        if (crustMat.HasProperty("_PierceEdge"))
+            crustMat.SetFloat("_PierceEdge", earth.Radius * 0.08f);
+        if (crustMat.HasProperty("_MoltenColor"))
+            crustMat.SetColor("_MoltenColor", new Color(1f, 0.28f, 0.04f, 1f));
+
         for (int i = 0; i < MaxHoles; i++)
         {
             if (i < holes.Count)

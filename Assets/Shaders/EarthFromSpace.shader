@@ -11,6 +11,8 @@ Shader "EarthSmasher/EarthFromSpace"
         _NightIntensity ("Night Lights", Range(0, 3)) = 1.0
         _AmbientFloor ("Ambient Floor", Range(0, 0.2)) = 0.05
         _PierceCount ("Pierce Count", Int) = 0
+        _PierceEdge ("Pierce Molten Edge", Float) = 0.35
+        _MoltenColor ("Molten Color", Color) = (1, 0.28, 0.05, 1)
         _PierceOrigin0 ("Pierce Origin 0", Vector) = (0,0,0,0)
         _PierceAxis0 ("Pierce Axis 0", Vector) = (0,1,0,0)
         _PierceRadius0 ("Pierce Radius 0", Float) = 0
@@ -54,6 +56,8 @@ Shader "EarthSmasher/EarthFromSpace"
             float _NightIntensity;
             float _AmbientFloor;
             int _PierceCount;
+            float _PierceEdge;
+            float4 _MoltenColor;
             float4 _PierceOrigin0;
             float4 _PierceAxis0;
             float _PierceRadius0;
@@ -90,14 +94,47 @@ Shader "EarthSmasher/EarthFromSpace"
                 return length(worldPos - closest);
             }
 
-            bool InPierceHole(float3 worldPos)
+            // x = inHole (1 clip), y = molten amount 0..1
+            float2 PierceSample(float3 worldPos, float3 origin, float3 axis, float radius)
             {
-                if (_PierceCount < 1) return false;
-                if (_PierceCount > 0 && DistToAxis(worldPos, _PierceOrigin0.xyz, _PierceAxis0.xyz) < _PierceRadius0) return true;
-                if (_PierceCount > 1 && DistToAxis(worldPos, _PierceOrigin1.xyz, _PierceAxis1.xyz) < _PierceRadius1) return true;
-                if (_PierceCount > 2 && DistToAxis(worldPos, _PierceOrigin2.xyz, _PierceAxis2.xyz) < _PierceRadius2) return true;
-                if (_PierceCount > 3 && DistToAxis(worldPos, _PierceOrigin3.xyz, _PierceAxis3.xyz) < _PierceRadius3) return true;
-                return false;
+                float d = DistToAxis(worldPos, origin, axis);
+                if (d < radius)
+                    return float2(1, 0);
+                float edge = max(_PierceEdge, 1e-4);
+                float m = 1.0 - saturate((d - radius) / edge);
+                m = m * m * (3.0 - 2.0 * m);
+                return float2(0, m);
+            }
+
+            float2 EvaluatePierce(float3 worldPos)
+            {
+                float2 r = float2(0, 0);
+                if (_PierceCount < 1) return r;
+                if (_PierceCount > 0)
+                {
+                    float2 s = PierceSample(worldPos, _PierceOrigin0.xyz, _PierceAxis0.xyz, _PierceRadius0);
+                    r.x = max(r.x, s.x);
+                    r.y = max(r.y, s.y);
+                }
+                if (_PierceCount > 1)
+                {
+                    float2 s = PierceSample(worldPos, _PierceOrigin1.xyz, _PierceAxis1.xyz, _PierceRadius1);
+                    r.x = max(r.x, s.x);
+                    r.y = max(r.y, s.y);
+                }
+                if (_PierceCount > 2)
+                {
+                    float2 s = PierceSample(worldPos, _PierceOrigin2.xyz, _PierceAxis2.xyz, _PierceRadius2);
+                    r.x = max(r.x, s.x);
+                    r.y = max(r.y, s.y);
+                }
+                if (_PierceCount > 3)
+                {
+                    float2 s = PierceSample(worldPos, _PierceOrigin3.xyz, _PierceAxis3.xyz, _PierceRadius3);
+                    r.x = max(r.x, s.x);
+                    r.y = max(r.y, s.y);
+                }
+                return r;
             }
 
             v2f vert(appdata v)
@@ -112,7 +149,8 @@ Shader "EarthSmasher/EarthFromSpace"
 
             fixed4 frag(v2f i) : SV_Target
             {
-                if (InPierceHole(i.worldPos))
+                float2 pierce = EvaluatePierce(i.worldPos);
+                if (pierce.x > 0.5)
                     clip(-1);
 
                 float3 day = tex2D(_MainTex, i.uv).rgb * _Color.rgb;
@@ -129,6 +167,12 @@ Shader "EarthSmasher/EarthFromSpace"
                 float3 sun = _LightColor0.rgb * (0.25 + 0.75 * lit);
 
                 float3 col = day * (sun * dayAmt + _AmbientFloor) + night * (1.0 - dayAmt);
+
+                // 구멍 가장자리 용암(주황/빨강) — 메시 추가 없이 셰이더만
+                float molten = pierce.y;
+                float3 hot = _MoltenColor.rgb * (1.5 + molten * 2.0);
+                col = lerp(col, hot, saturate(molten * 0.95));
+
                 return float4(col, 1);
             }
             ENDCG

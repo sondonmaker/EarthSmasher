@@ -161,43 +161,82 @@ public class LaserStrikeSystem : MonoBehaviour
     {
         Vector3 center = earth.transform.position;
         Vector3 antipode = center - normal * earth.Radius;
-        Vector3 origin = point + normal * (earth.Radius * 3.5f);
-        Vector3 exitBeyond = antipode - normal * (earth.Radius * 1.2f);
+        Vector3 origin = point + normal * (earth.Radius * 4f);
+        Vector3 exitBeyond = antipode - normal * (earth.Radius * 1.5f);
 
-        Color col = new Color(1f, 0.92f, 0.45f);
-        var beam = MakeBeam("PierceLaser", origin, exitBeyond, col, 0.28f);
-        CameraShake.Shake(0.22f, 0.4f);
+        // 레퍼런스처럼 푸른 레이저 (코어/글로우/아우터)
+        float holeR = earth.Radius * 0.16f;
+        var core = MakeBeam("PierceBeamCore", origin, exitBeyond, new Color(0.85f, 0.98f, 1f), holeR * 0.55f, 8f);
+        var glow = MakeBeam("PierceBeamGlow", origin, exitBeyond, new Color(0.15f, 0.55f, 1f), holeR * 1.05f, 5f);
+        var outer = MakeBeam("PierceBeamOuter", origin, exitBeyond, new Color(0.2f, 0.45f, 1f), holeR * 1.45f, 2.2f, true);
+
+        CameraShake.Shake(0.25f, 0.4f);
+
+        // 즉시 깔끔한 원통 관통 + 가장자리 용암(셰이더)
+        EarthPierceHole.Ensure(earth)?.AddPierce(point, antipode, holeR);
 
         float t = 0f;
-        const float hold = 2.6f;
+        const float hold = 2.2f;
         while (t < hold)
         {
             t += Time.deltaTime;
-            float u = Mathf.Clamp01(t / hold);
-            float w = Mathf.Lerp(0.16f, 0.4f, u);
-            AlignBeam(beam.transform, origin, exitBeyond, w);
+            float pulse = 1f + 0.06f * Mathf.Sin(t * 28f);
+            AlignBeam(core.transform, origin, exitBeyond, holeR * 0.55f * pulse);
+            AlignBeam(glow.transform, origin, exitBeyond, holeR * 1.05f * pulse);
+            AlignBeam(outer.transform, origin, exitBeyond, holeR * 1.45f);
 
+            // 스파크
             if (Time.frameCount % 2 == 0)
-            {
-                // 입/출구를 점점 크게 파고 용암 자국
-                float rad = Mathf.Lerp(0.14f, 0.34f, u);
-                float depth = Mathf.Lerp(0.1f, 0.28f, u);
-                EarthCraterDeform.Ensure(earth)?.DrillBore(point, rad, depth, 0.18f);
-                EarthCraterDeform.Ensure(earth)?.DrillBore(antipode, rad, depth, 0.18f);
-                EarthSurfaceScorch.Ensure(earth)?.BurnAt(point, 0.1f * u, 0.98f);
-                EarthSurfaceScorch.Ensure(earth)?.BurnAt(antipode, 0.1f * u, 0.98f);
-            }
+                SpawnBlueSpark(Vector3.Lerp(origin, exitBeyond, Random.value), holeR * 0.4f);
+
             yield return null;
         }
 
-        if (beam != null)
-            Destroy(beam);
+        // 짧게 남았다가 페이드
+        float fade = 0.7f;
+        t = 0f;
+        while (t < fade)
+        {
+            t += Time.deltaTime;
+            float a = 1f - t / fade;
+            SetBeamAlpha(core, a);
+            SetBeamAlpha(glow, a * 0.8f);
+            SetBeamAlpha(outer, a * 0.5f);
+            yield return null;
+        }
 
-        // 실제 관통 구멍: 셰이더 clip + 용암 터널 → 반대쪽이 보임
-        float holeR = earth.Radius * 0.18f;
-        EarthPierceHole.Ensure(earth)?.AddPierce(point, antipode, holeR);
+        if (core != null) Destroy(core);
+        if (glow != null) Destroy(glow);
+        if (outer != null) Destroy(outer);
+        CameraShake.Shake(0.12f, 0.2f);
+    }
 
-        CameraShake.Shake(0.32f, 0.45f);
+    void SpawnBlueSpark(Vector3 pos, float size)
+    {
+        var go = GameObject.CreatePrimitive(PrimitiveType.Sphere);
+        Object.Destroy(go.GetComponent<Collider>());
+        go.name = "PierceSpark";
+        go.transform.position = pos + Random.insideUnitSphere * size;
+        go.transform.localScale = Vector3.one * (size * Random.Range(0.08f, 0.2f));
+        var rend = go.GetComponent<Renderer>();
+        rend.material = RuntimeMaterial.Opaque(new Color(0.4f, 0.8f, 1f), 6f);
+        rend.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+        Destroy(go, 0.18f);
+    }
+
+    static void SetBeamAlpha(GameObject beam, float a)
+    {
+        if (beam == null)
+            return;
+        var rend = beam.GetComponent<Renderer>();
+        if (rend == null || rend.material == null)
+            return;
+        var c = rend.material.color;
+        c.a = Mathf.Clamp01(a);
+        if (rend.material.HasProperty("_Color"))
+            rend.material.SetColor("_Color", c);
+        else
+            rend.material.color = c;
     }
 
     IEnumerator LightningBurst(Vector3 point, Vector3 normal)
@@ -225,13 +264,16 @@ public class LaserStrikeSystem : MonoBehaviour
             Destroy(main);
     }
 
-    static GameObject MakeBeam(string name, Vector3 from, Vector3 to, Color color, float width)
+    static GameObject MakeBeam(string name, Vector3 from, Vector3 to, Color color, float width, float emission = 4f, bool soft = false)
     {
         var go = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
         Object.Destroy(go.GetComponent<Collider>());
         go.name = name;
         var rend = go.GetComponent<Renderer>();
-        rend.material = RuntimeMaterial.Opaque(color, 4f);
+        if (soft)
+            rend.material = RuntimeMaterial.UnlitTransparent(new Color(color.r, color.g, color.b, 0.35f));
+        else
+            rend.material = RuntimeMaterial.Opaque(color, emission);
         rend.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
         AlignBeam(go.transform, from, to, width);
         return go;
