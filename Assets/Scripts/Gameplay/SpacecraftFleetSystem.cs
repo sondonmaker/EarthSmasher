@@ -286,39 +286,105 @@ public class SpacecraftFleetSystem : MonoBehaviour
 
     IEnumerator SummonFighterWing()
     {
+        // 타겟을 스치듯 통과(스트레이핑) 후 퇴장
         Vector3 dir = FaceDir();
+        Vector3 center = earth.transform.position;
+        float R = earth.Radius;
+        Vector3 target = center + dir * R;
+
+        Vector3 flyDir = Vector3.Cross(dir, Vector3.up);
+        if (flyDir.sqrMagnitude < 1e-4f)
+            flyDir = Vector3.Cross(dir, Vector3.right);
+        flyDir.Normalize();
+        Vector3 wingAxis = Vector3.Cross(flyDir, dir).normalized;
+
+        Vector3 start = target - flyDir * (R * 3.4f) + dir * (R * 1.6f);
+        Vector3 end = target + flyDir * (R * 3.6f) + dir * (R * 1.35f);
+
         var root = new GameObject("FighterWing");
-        root.transform.position = earth.transform.position;
-        for (int i = 0; i < 6; i++)
+        var fighters = new Transform[5];
+        float[] lane = { -0.55f, -0.25f, 0f, 0.25f, 0.55f };
+        float[] lag = { 0.08f, 0.03f, 0f, 0.03f, 0.08f };
+
+        for (int i = 0; i < fighters.Length; i++)
         {
-            float ang = i / 6f * Mathf.PI * 2f;
-            Vector3 side = new Vector3(Mathf.Cos(ang), 0.15f * Mathf.Sin(ang * 2f), Mathf.Sin(ang));
-            Vector3 p = OrbitPos((dir + side * 0.4f).normalized, 1.45f + (i % 3) * 0.08f);
-            var f = Prim(PrimitiveType.Cube, "Fighter", p, new Vector3(0.12f, 0.04f, 0.22f),
+            Vector3 offset = wingAxis * (lane[i] * R * 0.22f) - flyDir * (lag[i] * R);
+            var f = Prim(PrimitiveType.Cube, "Fighter", start + offset, new Vector3(0.1f, 0.035f, 0.2f),
                 new Color(0.9f, 0.55f, 0.2f), 0.8f);
             f.transform.SetParent(root.transform, true);
-            f.transform.rotation = Quaternion.LookRotation(earth.transform.position - p);
+            f.transform.rotation = Quaternion.LookRotation(flyDir, dir);
+            fighters[i] = f.transform;
         }
 
-        float life = 7f;
+        float duration = 3.2f;
         float t = 0f;
-        float nextPass = 0.8f;
-        while (t < life && root != null)
+        bool volleyA = false;
+        bool volleyB = false;
+        bool volleyC = false;
+
+        while (t < duration && root != null)
         {
             t += Time.deltaTime;
-            root.transform.Rotate(Vector3.up, 40f * Time.deltaTime, Space.World);
-            if (t >= nextPass)
+            float u = Mathf.Clamp01(t / duration);
+            // 가속 통과감
+            float ease = u * u * (3f - 2f * u);
+
+            for (int i = 0; i < fighters.Length; i++)
             {
-                nextPass = t + 0.9f;
-                Vector3 hitDir = (FaceDir() + Random.insideUnitSphere * 0.35f).normalized;
-                Vector3 hit = earth.transform.position + hitDir * earth.Radius;
-                NuclearBlast.Play(earth, hit, hitDir, 0.45f);
+                if (fighters[i] == null)
+                    continue;
+                float ui = Mathf.Clamp01(ease - lag[i] * 0.15f);
+                Vector3 offset = wingAxis * (lane[i] * R * 0.22f);
+                // 타겟 근처에서 살짝 낮게 깔림
+                float dip = Mathf.Sin(ui * Mathf.PI) * (R * 0.35f);
+                Vector3 pos = Vector3.Lerp(start, end, ui) + offset - dir * dip * 0.15f + dir * (R * 0.05f);
+                // 표면 위로 유지
+                Vector3 fromCenter = pos - center;
+                float minAlt = R * 1.12f;
+                if (fromCenter.magnitude < minAlt)
+                    pos = center + fromCenter.normalized * minAlt;
+
+                fighters[i].position = pos;
+                Vector3 look = (end - start).normalized;
+                fighters[i].rotation = Quaternion.LookRotation(look, dir);
             }
+
+            // 타겟 통과 구간에서 연사
+            if (!volleyA && u > 0.38f)
+            {
+                volleyA = true;
+                FireStrafe(root.transform, target, dir, 0.55f);
+            }
+            if (!volleyB && u > 0.48f)
+            {
+                volleyB = true;
+                FireStrafe(root.transform, target + flyDir * (R * 0.08f), dir, 0.7f);
+            }
+            if (!volleyC && u > 0.58f)
+            {
+                volleyC = true;
+                FireStrafe(root.transform, target - flyDir * (R * 0.06f), dir, 0.5f);
+            }
+
             yield return null;
         }
 
         if (root != null)
             Object.Destroy(root);
+    }
+
+    void FireStrafe(Transform wingRoot, Vector3 hit, Vector3 normal, float power)
+    {
+        Vector3 from = hit + normal * (earth.Radius * 0.5f);
+        if (wingRoot != null && wingRoot.childCount > 0)
+        {
+            int idx = Random.Range(0, wingRoot.childCount);
+            from = wingRoot.GetChild(idx).position;
+        }
+        StartCoroutine(FireLaser(from, hit, new Color(1f, 0.55f, 0.15f), 0.22f));
+        NuclearBlast.Play(earth, hit, normal, power);
+        EarthCraterDeform.Ensure(earth)?.Dig(hit, 0.07f, 0.035f, false);
+        EarthSurfaceScorch.Ensure(earth)?.BurnAt(hit, 0.025f, 0.65f);
     }
 
     IEnumerator SummonPlanetKiller()
