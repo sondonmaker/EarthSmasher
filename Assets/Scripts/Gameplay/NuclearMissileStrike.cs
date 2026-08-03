@@ -93,13 +93,8 @@ public class NuclearMissileStrike : MonoBehaviour
                 CameraShake.Shake(0.16f, 0.28f);
                 break;
             case NukeStrikeKind.MiningDrill:
-            {
-                var deform = EarthCraterDeform.Ensure(earth);
-                if (deform != null)
-                    deform.Dig(worldPoint, 0.16f, 0.1f, true);
-                CameraShake.Shake(0.06f, 0.12f);
+                MiningDrillRig.Spawn(earth, worldPoint, normal);
                 break;
-            }
             case NukeStrikeKind.Antimatter:
                 NuclearMissile.LaunchToWorldPoint(earth, worldPoint, 2.1f, -1f, null);
                 break;
