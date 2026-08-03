@@ -104,7 +104,8 @@ public class NuclearMissileStrike : MonoBehaviour
                 NuclearMissile.LaunchToWorldPoint(earth, worldPoint, 2.1f, -1f, null);
                 break;
             case NukeStrikeKind.Guided:
-                NuclearMissile.LaunchToWorldPoint(earth, worldPoint, 1.15f, 2.2f, null);
+                // 빠르게 돌입
+                NuclearMissile.LaunchToWorldPoint(earth, worldPoint, 1.15f, 0.75f, null);
                 break;
             default:
                 NuclearMissile.LaunchToWorldPoint(earth, worldPoint, 1.35f, -1f, null);
