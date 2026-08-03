@@ -19,6 +19,7 @@ public class EarthCraterDeform : MonoBehaviour
     int lockedVertexCount;
     int lockedUvCount;
     bool ready;
+    int digCountSalt;
     readonly List<DigSite> sites = new List<DigSite>();
 
     class DigSite
@@ -149,6 +150,14 @@ public class EarthCraterDeform : MonoBehaviour
     /// <summary>블랙홀용: 안쪽으로만 파냄. 림/누적 타격 없음 (스파이크 방지).</summary>
     public void CarveHole(Vector3 worldPoint, float radiusNorm, float depthNorm)
     {
+        DrillBore(worldPoint, radiusNorm, depthNorm, minShellRadius);
+    }
+
+    /// <summary>
+    /// 드릴/블랙홀: 림 없이 안쪽으로만. shellFloor가 낮을수록 더 깊은 구멍.
+    /// </summary>
+    public void DrillBore(Vector3 worldPoint, float radiusNorm, float depthNorm, float shellFloor)
+    {
         EnsureReady();
         if (workingCrust == null || !UvLockIntact(workingCrust))
             return;
@@ -157,13 +166,16 @@ public class EarthCraterDeform : MonoBehaviour
         if (local.sqrMagnitude < 1e-8f)
             return;
 
-        float depth = Mathf.Clamp(depthNorm, 0.01f, 0.22f);
-        float radius = Mathf.Clamp(radiusNorm, 0.04f, 0.32f);
-        DeformVerticesOnly(workingCrust, local.normalized, radius, depth, 0f, HashDir(local.normalized), minShellRadius);
+        float depth = Mathf.Clamp(depthNorm, 0.02f, 0.28f);
+        float radius = Mathf.Clamp(radiusNorm, 0.05f, 0.34f);
+        float floor = Mathf.Clamp(shellFloor, 0.18f, minShellRadius);
+        digCountSalt++;
+        // rimFrac = 0 → 절대 바깥으로 솟지 않음
+        DeformVerticesOnly(workingCrust, local.normalized, radius, depth, 0f, HashDir(local.normalized) ^ digCountSalt, floor);
 
         if (!UvLockIntact(workingCrust))
         {
-            Debug.LogError("[EarthCraterDeform] CarveHole corrupted UVs.");
+            Debug.LogError("[EarthCraterDeform] DrillBore corrupted UVs.");
             ready = false;
             workingCrust = null;
             return;
