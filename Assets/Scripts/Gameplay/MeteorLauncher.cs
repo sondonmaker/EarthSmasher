@@ -45,6 +45,7 @@ public class MeteorLauncher : MonoBehaviour
         if (WeaponRailPanel.BlocksGameplay) return;
         if (DisasterUiGate.ModalOpen) return;
         if (NuclearMissileStrike.Instance != null && NuclearMissileStrike.Instance.IsAiming) return;
+        if (CosmicAnomalySystem.Instance != null && CosmicAnomalySystem.Instance.IsAiming) return;
 
         RefreshHud();
 

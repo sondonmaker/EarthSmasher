@@ -1,8 +1,17 @@
 using UnityEngine;
 using UnityEngine.InputSystem;
 
+public enum NukeStrikeKind
+{
+    Nuclear,
+    Antimatter,
+    Guided,
+    FusionCore,
+    MiningDrill
+}
+
 /// <summary>
-/// War 패널의 Nuke Missile: 버튼 → 지구 클릭 → ICBM 비행 → 핵폭발.
+/// 미사일/코어 조준: 버튼 → 지구 클릭 → 효과.
 /// </summary>
 public class NuclearMissileStrike : MonoBehaviour
 {
@@ -10,7 +19,6 @@ public class NuclearMissileStrike : MonoBehaviour
 
     [SerializeField] Camera cam;
     [SerializeField] EarthPlanet earth;
-    [SerializeField] float power = 1.35f;
     [SerializeField] float cooldown = 0.35f;
     [SerializeField] float tapMoveThreshold = 14f;
     [SerializeField] LayerMask earthMask = ~0;
@@ -18,7 +26,10 @@ public class NuclearMissileStrike : MonoBehaviour
     float readyAt;
     bool pressTracking;
     Vector2 pressPos;
+    NukeStrikeKind kind = NukeStrikeKind.Nuclear;
+
     public bool IsAiming { get; private set; }
+    public NukeStrikeKind AimKind => kind;
 
     public static NuclearMissileStrike Ensure()
     {
@@ -44,12 +55,13 @@ public class NuclearMissileStrike : MonoBehaviour
             Instance = null;
     }
 
-    public void BeginAim()
+    public void BeginAim(NukeStrikeKind strikeKind = NukeStrikeKind.Nuclear)
     {
         if (earth == null)
             earth = FindObjectOfType<EarthPlanet>();
         if (cam == null)
             cam = Camera.main;
+        kind = strikeKind;
         IsAiming = true;
         pressTracking = false;
     }
@@ -94,11 +106,42 @@ public class NuclearMissileStrike : MonoBehaviour
         if (!TryConsumeTap(out Vector2 screenPos))
             return;
 
-        if (!TryGetEarthHit(screenPos, out Vector3 worldPoint))
+        if (!TryGetEarthHit(screenPos, out Vector3 worldPoint, out Vector3 normal))
             return;
 
-        NuclearMissile.LaunchToWorldPoint(earth, worldPoint, power, -1f, null);
+        FireAt(worldPoint, normal);
         readyAt = Time.time + cooldown;
+    }
+
+    void FireAt(Vector3 worldPoint, Vector3 normal)
+    {
+        if (earth == null)
+            return;
+
+        switch (kind)
+        {
+            case NukeStrikeKind.FusionCore:
+                NuclearBlast.Play(earth, worldPoint, normal, 1.8f);
+                CameraShake.Shake(0.16f, 0.28f);
+                break;
+            case NukeStrikeKind.MiningDrill:
+            {
+                var deform = EarthCraterDeform.Ensure(earth);
+                if (deform != null)
+                    deform.Dig(worldPoint, 0.16f, 0.1f, true);
+                CameraShake.Shake(0.06f, 0.12f);
+                break;
+            }
+            case NukeStrikeKind.Antimatter:
+                NuclearMissile.LaunchToWorldPoint(earth, worldPoint, 2.1f, -1f, null);
+                break;
+            case NukeStrikeKind.Guided:
+                NuclearMissile.LaunchToWorldPoint(earth, worldPoint, 1.15f, 2.2f, null);
+                break;
+            default:
+                NuclearMissile.LaunchToWorldPoint(earth, worldPoint, 1.35f, -1f, null);
+                break;
+        }
     }
 
     bool TryConsumeTap(out Vector2 screenPos)
@@ -170,9 +213,10 @@ public class NuclearMissileStrike : MonoBehaviour
         return false;
     }
 
-    bool TryGetEarthHit(Vector2 screenPos, out Vector3 worldPoint)
+    bool TryGetEarthHit(Vector2 screenPos, out Vector3 worldPoint, out Vector3 normal)
     {
         worldPoint = default;
+        normal = Vector3.up;
         if (cam == null)
             cam = Camera.main;
         if (cam == null || earth == null)
@@ -185,6 +229,7 @@ public class NuclearMissileStrike : MonoBehaviour
             return false;
 
         worldPoint = hit.point;
+        normal = hit.normal;
         return true;
     }
 
@@ -200,6 +245,18 @@ public class NuclearMissileStrike : MonoBehaviour
         };
         style.normal.textColor = new Color(1f, 0.85f, 0.35f, 1f);
         GUI.Label(new Rect(0f, Screen.height - 56f, Screen.width, 28f),
-            "NUKE MISSILE — click Earth to strike  (Esc / RMB cancel)", style);
+            LabelFor(kind) + " — click Earth  (Esc / RMB cancel)", style);
+    }
+
+    static string LabelFor(NukeStrikeKind k)
+    {
+        switch (k)
+        {
+            case NukeStrikeKind.Antimatter: return "ANTIMATTER MISSILE";
+            case NukeStrikeKind.Guided: return "GUIDED MISSILE";
+            case NukeStrikeKind.FusionCore: return "FUSION CORE";
+            case NukeStrikeKind.MiningDrill: return "MINING DRILL";
+            default: return "NUKE MISSILE";
+        }
     }
 }

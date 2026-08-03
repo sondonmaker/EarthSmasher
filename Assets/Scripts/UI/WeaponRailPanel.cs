@@ -11,9 +11,9 @@ public class WeaponRailPanel : MonoBehaviour
 
     const float CatSize = 56f;
     const float CatGap = 8f;
-    const float SubW = 92f;
-    const float SubH = 78f;
-    const float SubGap = 6f;
+    const float SubW = 96f;
+    const float SubH = 62f;
+    const float SubGap = 5f;
     const float Pad = 12f;
     const float Top = 64f;
 
@@ -22,7 +22,7 @@ public class WeaponRailPanel : MonoBehaviour
     static readonly Color Face = new Color(0.12f, 0.13f, 0.15f, 0.92f);
     static readonly Color FaceOn = new Color(0.18f, 0.14f, 0.1f, 0.95f);
 
-    int selectedCat = 1; // Impact default
+    int selectedCat = 0; // 1번 Impact
     int selectedSub = -1;
     bool submenuOpen = true;
     string toast;
@@ -79,48 +79,46 @@ public class WeaponRailPanel : MonoBehaviour
     {
         cats = new[]
         {
-            new Cat
-            {
-                id = "space",
-                icon = "@",
-                tip = "Space",
-                subs = new[]
-                {
-                    SubOf("Soon", "~", "Coming soon", null, null)
-                }
-            },
+            // 1번: 우주/충격
             new Cat
             {
                 id = "impact",
-                icon = ">",
+                icon = "1",
                 tip = "Impact",
                 subs = new[]
                 {
                     SubOf("asteroid", "*", "Asteroid", FireSmallAsteroid, () => false),
-                    SubOf("big_meteor", "#", "Big Meteor", FireBigMeteor, () => false),
-                    SubOf("moon_orbit", "o", "Moon Orbit", () => FireMoon(MoonImpactMode.Orbit), MoonBusy),
-                    SubOf("moon_crash", "O", "Moon Crash", () => FireMoon(MoonImpactMode.Crash), MoonBusy)
+                    SubOf("shower", "S", "Meteor Shower", FireMeteorShower, ShowerBusy),
+                    SubOf("moon_crash", "O", "Moon Crash", () => FireMoon(MoonImpactMode.Crash), MoonBusy),
+                    SubOf("blackhole", "B", "Black Hole", () => ArmCosmic(CosmicAnomalyKind.BlackHole), () => false),
+                    SubOf("vortex", "V", "Vortex", () => ArmCosmic(CosmicAnomalyKind.Vortex), () => false)
                 }
             },
+            // 2번: 미사일
             new Cat
             {
-                id = "energy",
-                icon = "+",
-                tip = "Energy",
+                id = "missile",
+                icon = "2",
+                tip = "Missile",
                 subs = new[]
                 {
-                    SubOf("laser", "/", "Laser Soon", null, null)
+                    SubOf("nuke_missile", "N", "Nuke Missile", () => ArmNuke(NukeStrikeKind.Nuclear), () => false),
+                    SubOf("fusion", "F", "Fusion Core", () => ArmNuke(NukeStrikeKind.FusionCore), () => false),
+                    SubOf("station", "T", "Missile Station", null, null),
+                    SubOf("remote", "R", "Remote Detonate", null, null),
+                    SubOf("antimatter", "A", "Antimatter", () => ArmNuke(NukeStrikeKind.Antimatter), () => false),
+                    SubOf("drill", "D", "Mining Drill", () => ArmNuke(NukeStrikeKind.MiningDrill), () => false),
+                    SubOf("guided", "G", "Guided Missile", () => ArmNuke(NukeStrikeKind.Guided), () => false)
                 }
             },
             new Cat
             {
                 id = "war",
-                icon = "N",
+                icon = "W",
                 tip = "War",
                 subs = new[]
                 {
-                    SubOf("missile", "M", "Nuke Missile", ArmNukeMissile, NukeMissileBusy),
-                    SubOf("nuke", "N", "Nuclear War", FireNuclear, NukeBusy)
+                    SubOf("nuke_war", "N", "Nuclear War", FireNuclear, NukeBusy)
                 }
             },
             new Cat
@@ -242,10 +240,7 @@ public class WeaponRailPanel : MonoBehaviour
                 float y = Top + i * (SubH + SubGap);
                 hitB = Mathf.Max(hitB, y + SubH);
                 Rect r = new Rect(subX, y, SubW, SubH);
-                bool on = selectedSub == i
-                    || (subs[i].id == "missile"
-                        && NuclearMissileStrike.Instance != null
-                        && NuclearMissileStrike.Instance.IsAiming);
+                bool on = selectedSub == i || IsSubAiming(subs[i].id);
                 bool busy = subs[i].busy != null && subs[i].busy();
                 bool locked = subs[i].fire == null;
 
@@ -260,9 +255,8 @@ public class WeaponRailPanel : MonoBehaviour
                     {
                         toast = null;
                         subs[i].fire?.Invoke();
-                        if (subs[i].id == "missile" && NuclearMissileStrike.Instance != null
-                            && NuclearMissileStrike.Instance.IsAiming)
-                            toast = "Click Earth to launch missile";
+                        if (IsSubAiming(subs[i].id))
+                            toast = "Click Earth to use " + subs[i].title;
                     }
                 }
             }
@@ -328,10 +322,41 @@ public class WeaponRailPanel : MonoBehaviour
 
     // --- Actions ---
 
+    static bool IsSubAiming(string id)
+    {
+        var nuke = NuclearMissileStrike.Instance;
+        if (nuke != null && nuke.IsAiming)
+        {
+            switch (id)
+            {
+                case "nuke_missile": return nuke.AimKind == NukeStrikeKind.Nuclear;
+                case "fusion": return nuke.AimKind == NukeStrikeKind.FusionCore;
+                case "antimatter": return nuke.AimKind == NukeStrikeKind.Antimatter;
+                case "drill": return nuke.AimKind == NukeStrikeKind.MiningDrill;
+                case "guided": return nuke.AimKind == NukeStrikeKind.Guided;
+            }
+        }
+
+        var cosmic = CosmicAnomalySystem.Instance;
+        if (cosmic != null && cosmic.IsAiming)
+        {
+            if (id == "blackhole") return cosmic.AimKind == CosmicAnomalyKind.BlackHole;
+            if (id == "vortex") return cosmic.AimKind == CosmicAnomalyKind.Vortex;
+        }
+
+        return false;
+    }
+
     static bool MoonBusy()
     {
         var m = MoonImpactSystem.Instance;
         return m != null && m.IsRunning;
+    }
+
+    static bool ShowerBusy()
+    {
+        var s = MeteorShowerSystem.Instance;
+        return s != null && s.IsRunning;
     }
 
     static bool NukeBusy()
@@ -340,21 +365,31 @@ public class WeaponRailPanel : MonoBehaviour
         return w != null && w.IsRunning;
     }
 
-    static bool NukeMissileBusy()
+    static void ArmNuke(NukeStrikeKind kind)
     {
-        // busy 표시 대신 조준 중 하이라이트용 — fire는 항상 허용(토글)
-        return false;
-    }
+        // cancel cosmic aim if any
+        CosmicAnomalySystem.Instance?.CancelAim();
 
-    static void ArmNukeMissile()
-    {
         var strike = NuclearMissileStrike.Ensure();
         if (strike == null)
             return;
-        if (strike.IsAiming)
+        if (strike.IsAiming && strike.AimKind == kind)
             strike.CancelAim();
         else
-            strike.BeginAim();
+            strike.BeginAim(kind);
+    }
+
+    static void ArmCosmic(CosmicAnomalyKind kind)
+    {
+        NuclearMissileStrike.Instance?.CancelAim();
+
+        var cosmic = CosmicAnomalySystem.Ensure();
+        if (cosmic == null)
+            return;
+        if (cosmic.IsAiming && cosmic.AimKind == kind)
+            cosmic.CancelAim();
+        else
+            cosmic.BeginAim(kind);
     }
 
     static bool QuakeBusy()
@@ -369,6 +404,11 @@ public class WeaponRailPanel : MonoBehaviour
         if (moon == null)
             return;
         moon.TryStart(mode);
+    }
+
+    static void FireMeteorShower()
+    {
+        MeteorShowerSystem.Ensure().TryStart();
     }
 
     static void FireNuclear()
@@ -390,13 +430,5 @@ public class WeaponRailPanel : MonoBehaviour
         var launcher = UnityEngine.Object.FindObjectOfType<MeteorLauncher>();
         if (launcher != null)
             launcher.FireTowardCamera();
-    }
-
-    /// <summary>우클릭/Space와 동일 — 큰 운석</summary>
-    static void FireBigMeteor()
-    {
-        var big = UnityEngine.Object.FindObjectOfType<BigMeteorStrike>();
-        if (big != null)
-            big.FireRandom();
     }
 }
