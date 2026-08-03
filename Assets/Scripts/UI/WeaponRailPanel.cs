@@ -114,17 +114,33 @@ public class WeaponRailPanel : MonoBehaviour
             new Cat
             {
                 id = "war",
-                icon = "W",
+                icon = "3",
                 tip = "War",
                 subs = new[]
                 {
                     SubOf("nuke_war", "N", "Nuclear War", FireNuclear, NukeBusy)
                 }
             },
+            // 4번: 우주선 소환
+            new Cat
+            {
+                id = "fleet",
+                icon = "4",
+                tip = "Fleet",
+                subs = new[]
+                {
+                    SubOf("ufo", "U", "UFO", () => SummonShip(SpacecraftKind.Ufo), () => false),
+                    SubOf("cannon", "C", "Orbital Cannon", () => SummonShip(SpacecraftKind.OrbitalCannon), () => false),
+                    SubOf("fighters", "F", "Fighter Wing", () => SummonShip(SpacecraftKind.FighterWing), () => false),
+                    SubOf("battleship", "B", "Battleship", () => SummonShip(SpacecraftKind.Battleship), () => false),
+                    SubOf("planet_killer", "P", "Planet Killer", () => SummonShip(SpacecraftKind.PlanetKiller), () => false),
+                    SubOf("von_neumann", "V", "Von Neumann", () => SummonShip(SpacecraftKind.VonNeumannProbe), () => false)
+                }
+            },
             new Cat
             {
                 id = "quake",
-                icon = "E",
+                icon = "5",
                 tip = "Quake",
                 subs = new[]
                 {
@@ -390,6 +406,17 @@ public class WeaponRailPanel : MonoBehaviour
             cosmic.CancelAim();
         else
             cosmic.BeginAim(kind);
+    }
+
+    static bool FleetBusy()
+    {
+        var f = SpacecraftFleetSystem.Instance;
+        return f != null && f.IsBusy;
+    }
+
+    static void SummonShip(SpacecraftKind kind)
+    {
+        SpacecraftFleetSystem.Ensure().TrySummon(kind);
     }
 
     static bool QuakeBusy()
