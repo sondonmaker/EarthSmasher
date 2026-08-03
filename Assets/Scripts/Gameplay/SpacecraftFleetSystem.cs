@@ -481,6 +481,13 @@ public class FleetBattleship : MonoBehaviour
         earth = planet;
         holdPos = pos;
         holdDir = dir.normalized;
+        transform.position = holdPos;
+
+        Vector3 tangent = Vector3.Cross(holdDir, Vector3.up);
+        if (tangent.sqrMagnitude < 1e-4f)
+            tangent = Vector3.Cross(holdDir, Vector3.right);
+        transform.rotation = Quaternion.LookRotation(tangent.normalized, holdDir);
+
         SpacecraftFleetSystem.RegisterBattleship(this);
     }
 
@@ -504,31 +511,33 @@ public class FleetBattleship : MonoBehaviour
             return;
         }
 
-        // 소환 지점 근처에 오래 머무름 (살짝만 흔들림)
-        float bob = Mathf.Sin(age * 0.7f) * (earth.Radius * 0.03f);
-        Vector3 side = Vector3.Cross(holdDir, Vector3.up);
-        if (side.sqrMagnitude < 1e-4f)
-            side = Vector3.Cross(holdDir, Vector3.right);
-        side.Normalize();
-        Vector3 target = holdPos + side * (Mathf.Sin(age * 0.35f) * earth.Radius * 0.08f) + holdDir * bob;
-        transform.position = Vector3.Lerp(transform.position, target, Time.deltaTime * 1.5f);
+        // 소환 지점에 고정 — 왓다갓다 이동 없음
+        transform.position = holdPos;
 
-        FleetUfo ufo = SpacecraftFleetSystem.FindNearestUfo(transform.position);
+        Vector3 tangent = Vector3.Cross(holdDir, Vector3.up);
+        if (tangent.sqrMagnitude < 1e-4f)
+            tangent = Vector3.Cross(holdDir, Vector3.right);
+        tangent.Normalize();
+        Quaternion park = Quaternion.LookRotation(tangent, holdDir);
+
+        FleetUfo ufo = SpacecraftFleetSystem.FindNearestUfo(holdPos);
         Vector3 aimPoint;
         if (ufo != null)
             aimPoint = ufo.transform.position;
         else
-        {
-            // 지구 표면 (홀드 방향 부근 + 약간의 랜덤)
-            Vector3 hitDir = (holdDir + Random.insideUnitSphere * 0.12f).normalized;
-            aimPoint = earth.transform.position + hitDir * earth.Radius;
-        }
+            aimPoint = earth.transform.position + holdDir * earth.Radius;
 
-        Vector3 look = (aimPoint - transform.position).normalized;
-        if (look.sqrMagnitude > 1e-6f)
+        // 선체는 거의 정자세 유지, 조준만 아주 살짝
+        Vector3 flatAim = Vector3.ProjectOnPlane(aimPoint - holdPos, holdDir);
+        if (flatAim.sqrMagnitude > 1e-4f)
         {
-            Quaternion want = Quaternion.LookRotation(look, holdDir);
-            transform.rotation = Quaternion.Slerp(transform.rotation, want, Time.deltaTime * 2.5f);
+            Quaternion aimRot = Quaternion.LookRotation(flatAim.normalized, holdDir);
+            Quaternion want = Quaternion.Slerp(park, aimRot, 0.28f);
+            transform.rotation = Quaternion.Slerp(transform.rotation, want, Time.deltaTime * 1.2f);
+        }
+        else
+        {
+            transform.rotation = Quaternion.Slerp(transform.rotation, park, Time.deltaTime * 1.2f);
         }
 
         if (age < nextShot)
@@ -544,8 +553,7 @@ public class FleetBattleship : MonoBehaviour
         }
         else
         {
-            Vector3 hitDir = (aimPoint - earth.transform.position).normalized;
-            // 핵폭탄급 임팩트
+            Vector3 hitDir = holdDir;
             NuclearBlast.Play(earth, aimPoint, hitDir, 1.25f);
             EarthCraterDeform.Ensure(earth)?.Dig(aimPoint, 0.12f, 0.07f, false);
             EarthSurfaceScorch.Ensure(earth)?.BurnAt(aimPoint, 0.04f, 0.8f);
