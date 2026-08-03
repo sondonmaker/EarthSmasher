@@ -107,6 +107,7 @@ public class WeaponRailPanel : MonoBehaviour
                     SubOf("shower", "S", "Meteor Shower", ShowerBusy),
                     SubOf("moon_crash", "O", "Moon Crash", MoonBusy),
                     SubOf("blackhole", "B", "Black Hole"),
+                    SubOf("spike", "X", "Spike Erupt"),
                     SubOf("vortex", "V", "Vortex")
                 }
             },
@@ -368,6 +369,9 @@ public class WeaponRailPanel : MonoBehaviour
                 break;
             case "blackhole":
                 CosmicAnomalySystem.Ensure().SpawnAt(CosmicAnomalyKind.BlackHole, point, normal);
+                break;
+            case "spike":
+                CosmicAnomalySystem.Ensure().SpawnAt(CosmicAnomalyKind.SpikeErupt, point, normal);
                 break;
             case "vortex":
                 CosmicAnomalySystem.Ensure().SpawnAt(CosmicAnomalyKind.Vortex, point, normal);

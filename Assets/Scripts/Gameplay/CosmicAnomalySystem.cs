@@ -1,29 +1,23 @@
 using System.Collections;
 using UnityEngine;
-using UnityEngine.InputSystem;
 
 public enum CosmicAnomalyKind
 {
     BlackHole,
-    Vortex
+    Vortex,
+    SpikeErupt
 }
 
-/// <summary>블랙홀 / 보텍스: 조준 후 클릭한 지점에 소환.</summary>
+/// <summary>블랙홀 / 보텍스 / 스파이크 분출.</summary>
 public class CosmicAnomalySystem : MonoBehaviour
 {
     public static CosmicAnomalySystem Instance { get; private set; }
 
     [SerializeField] Camera cam;
     [SerializeField] EarthPlanet earth;
-    [SerializeField] float tapMoveThreshold = 14f;
-    [SerializeField] LayerMask earthMask = ~0;
 
-    CosmicAnomalyKind pending;
-    bool pressTracking;
-    Vector2 pressPos;
-
-    public bool IsAiming { get; private set; }
-    public CosmicAnomalyKind AimKind => pending;
+    public bool IsAiming => false;
+    public CosmicAnomalyKind AimKind { get; private set; }
 
     public static CosmicAnomalySystem Ensure()
     {
@@ -48,70 +42,123 @@ public class CosmicAnomalySystem : MonoBehaviour
             Instance = null;
     }
 
-    public void BeginAim(CosmicAnomalyKind kind)
-    {
-        // 레일 패널이 조준을 담당 — 직접 스폰 API만 유지
-        pending = kind;
-        IsAiming = false;
-    }
-
-    public void CancelAim()
-    {
-        IsAiming = false;
-        pressTracking = false;
-    }
-
     public void SpawnAt(CosmicAnomalyKind kind, Vector3 point, Vector3 normal)
     {
         if (earth == null)
             earth = FindObjectOfType<EarthPlanet>();
-        if (kind == CosmicAnomalyKind.BlackHole)
-            StartCoroutine(RunBlackHole(point, normal));
-        else
-            StartCoroutine(RunVortex(point, normal));
+        AimKind = kind;
+
+        switch (kind)
+        {
+            case CosmicAnomalyKind.BlackHole:
+                StartCoroutine(RunBlackHole(point, normal));
+                break;
+            case CosmicAnomalyKind.SpikeErupt:
+                StartCoroutine(RunSpikeErupt(point, normal));
+                break;
+            default:
+                StartCoroutine(RunVortex(point, normal));
+                break;
+        }
     }
 
-    void Update()
-    {
-        // 입력은 WeaponRailPanel이 처리
-    }
-
+    /// <summary>작은 블랙홀 → 점점 커지며 그 자리 지표를 안으로 삼킴.</summary>
     IEnumerator RunBlackHole(Vector3 point, Vector3 normal)
     {
+        if (earth == null)
+            yield break;
+
+        // 표면 바로 위 작은 점에서 시작
         var go = GameObject.CreatePrimitive(PrimitiveType.Sphere);
         go.name = "BlackHole";
         Object.Destroy(go.GetComponent<Collider>());
-        go.transform.position = point + normal * (earth != null ? earth.Radius * 0.35f : 1.2f);
-        go.transform.localScale = Vector3.one * 0.15f;
+        go.transform.position = point + normal * (earth.Radius * 0.02f);
+        go.transform.localScale = Vector3.one * 0.04f;
+
         var rend = go.GetComponent<Renderer>();
-        rend.material = RuntimeMaterial.Opaque(new Color(0.02f, 0.02f, 0.05f), 0f);
+        rend.material = RuntimeMaterial.Opaque(new Color(0.01f, 0.01f, 0.02f), 0f);
         rend.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
 
         var ring = GameObject.CreatePrimitive(PrimitiveType.Sphere);
         Object.Destroy(ring.GetComponent<Collider>());
+        ring.name = "Accretion";
         ring.transform.SetParent(go.transform, false);
-        ring.transform.localScale = Vector3.one * 1.35f;
-        ring.GetComponent<Renderer>().material = RuntimeMaterial.UnlitTransparent(new Color(0.55f, 0.2f, 1f, 0.35f));
+        ring.transform.localScale = Vector3.one * 1.55f;
+        ring.GetComponent<Renderer>().material = RuntimeMaterial.UnlitTransparent(new Color(0.7f, 0.25f, 1f, 0.4f));
+        ring.GetComponent<Renderer>().shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
 
-        CameraShake.Shake(0.12f, 0.25f);
+        CameraShake.Shake(0.1f, 0.2f);
+
+        var deform = EarthCraterDeform.Ensure(earth);
+        var scorch = EarthSurfaceScorch.Ensure(earth);
+
+        const float life = 5.0f;
         float t = 0f;
-        while (t < 4.5f)
+        float lastCarve = -1f;
+        while (t < life)
         {
             t += Time.deltaTime;
-            float u = Mathf.Clamp01(t / 4.5f);
-            float s = Mathf.Lerp(0.15f, 1.1f, Mathf.Sin(u * Mathf.PI));
-            go.transform.localScale = Vector3.one * s;
-            go.transform.Rotate(Vector3.up, 120f * Time.deltaTime, Space.World);
-            if (earth != null)
+            float u = Mathf.Clamp01(t / life);
+            // 작 → 큼 (끝에서 약간 유지)
+            float grow = Mathf.SmoothStep(0f, 1f, Mathf.Clamp01(u / 0.75f));
+            float size = Mathf.Lerp(0.04f, earth.Radius * 0.55f, grow);
+            go.transform.localScale = Vector3.one * size;
+            // 점점 표면 안으로 파고듦
+            go.transform.position = point + normal * (earth.Radius * Mathf.Lerp(0.02f, -0.08f, grow));
+            go.transform.Rotate(normal, 90f * Time.deltaTime, Space.World);
+
+            // 간헐 carve — Dig 누적/림 없이 안쪽으로만
+            if (deform != null && t - lastCarve > 0.12f)
             {
-                var deform = EarthCraterDeform.Ensure(earth);
-                if (deform != null && Time.frameCount % 8 == 0)
-                    deform.Dig(point, 0.12f * u, 0.04f * u, false);
+                lastCarve = t;
+                float rad = Mathf.Lerp(0.05f, 0.26f, grow);
+                float depth = Mathf.Lerp(0.02f, 0.18f, grow * grow);
+                deform.CarveHole(point, rad, depth);
+                if (scorch != null)
+                    scorch.BurnAt(point, 0.02f + 0.04f * grow, 0.9f);
             }
+
             yield return null;
         }
 
+        // 마지막 한 번 더 깊게
+        deform?.CarveHole(point, 0.28f, 0.2f);
+        CameraShake.Shake(0.14f, 0.22f);
         Object.Destroy(go);
+    }
+
+    /// <summary>지표가 삐죽 솟는 스파이크 분출 (옛 블랙홀 버그 연출).</summary>
+    IEnumerator RunSpikeErupt(Vector3 point, Vector3 normal)
+    {
+        if (earth == null)
+            yield break;
+
+        CameraShake.Shake(0.18f, 0.3f);
+
+        // 짧은 경고 섬광
+        var flash = new GameObject("SpikeFlash");
+        flash.transform.position = point + normal * 0.3f;
+        var light = flash.AddComponent<Light>();
+        light.type = LightType.Point;
+        light.color = new Color(1f, 0.35f, 0.15f);
+        light.intensity = 10f;
+        light.range = earth.Radius * 2f;
+        flash.AddComponent<ImpactFlashFade>().Begin(0.5f);
+        Object.Destroy(flash, 0.8f);
+
+        var deform = EarthCraterDeform.Ensure(earth);
+        if (deform != null)
+        {
+            // 단계적으로 더 높이 솟아오름
+            deform.SpikeErupt(point, 0.12f, 0.25f, 11);
+            yield return new WaitForSecondsRealtime(0.12f);
+            deform.SpikeErupt(point, 0.16f, 0.45f, 22);
+            yield return new WaitForSecondsRealtime(0.12f);
+            deform.SpikeErupt(point, 0.2f, 0.75f, 33);
+        }
+
+        EarthSurfaceScorch.Ensure(earth)?.BurnAt(point, 0.05f, 0.7f);
+        CameraShake.Shake(0.12f, 0.2f);
     }
 
     IEnumerator RunVortex(Vector3 point, Vector3 normal)
@@ -133,86 +180,23 @@ public class CosmicAnomalySystem : MonoBehaviour
         }
 
         CameraShake.Shake(0.08f, 0.2f);
+        var deform = EarthCraterDeform.Ensure(earth);
         float t = 0f;
+        float last = -1f;
         while (t < 3.8f)
         {
             t += Time.deltaTime;
             root.transform.Rotate(normal, 220f * Time.deltaTime, Space.World);
             float pulse = 1f + 0.08f * Mathf.Sin(t * 8f);
             root.transform.localScale = Vector3.one * pulse;
-            if (earth != null && Time.frameCount % 10 == 0)
+            if (deform != null && t - last > 0.25f)
             {
-                var deform = EarthCraterDeform.Ensure(earth);
-                if (deform != null)
-                    deform.Dig(point, 0.1f, 0.03f, false);
+                last = t;
+                deform.CarveHole(point, 0.08f, 0.03f);
             }
             yield return null;
         }
 
         Object.Destroy(root);
-    }
-
-    bool TryConsumeTap(out Vector2 screenPos)
-    {
-        screenPos = default;
-        var mouse = Mouse.current;
-        if (mouse == null)
-            return false;
-
-        if (mouse.leftButton.wasPressedThisFrame)
-        {
-            pressTracking = true;
-            pressPos = mouse.position.ReadValue();
-            return false;
-        }
-
-        if (pressTracking && mouse.leftButton.wasReleasedThisFrame)
-        {
-            pressTracking = false;
-            Vector2 up = mouse.position.ReadValue();
-            if ((up - pressPos).magnitude <= tapMoveThreshold)
-            {
-                screenPos = up;
-                return true;
-            }
-        }
-
-        return false;
-    }
-
-    bool TryGetEarthHit(Vector2 screenPos, out Vector3 worldPoint, out Vector3 normal)
-    {
-        worldPoint = default;
-        normal = Vector3.up;
-        if (cam == null)
-            cam = Camera.main;
-        if (cam == null || earth == null)
-            return false;
-
-        Ray ray = cam.ScreenPointToRay(screenPos);
-        if (!Physics.Raycast(ray, out RaycastHit hit, 500f, earthMask))
-            return false;
-        if (hit.collider == null || hit.collider.GetComponentInParent<EarthPlanet>() != earth)
-            return false;
-
-        worldPoint = hit.point;
-        normal = hit.normal;
-        return true;
-    }
-
-    void OnGUI()
-    {
-        if (!IsAiming)
-            return;
-        var style = new GUIStyle(GUI.skin.label)
-        {
-            fontSize = 14,
-            alignment = TextAnchor.MiddleCenter,
-            fontStyle = FontStyle.Bold
-        };
-        style.normal.textColor = new Color(0.75f, 0.9f, 1f, 1f);
-        string name = pending == CosmicAnomalyKind.BlackHole ? "BLACK HOLE" : "VORTEX";
-        GUI.Label(new Rect(0f, Screen.height - 56f, Screen.width, 28f),
-            name + " — click Earth to summon  (Esc / RMB cancel)", style);
     }
 }

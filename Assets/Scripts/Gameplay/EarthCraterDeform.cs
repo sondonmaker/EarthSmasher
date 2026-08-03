@@ -146,6 +146,61 @@ public class EarthCraterDeform : MonoBehaviour
         return site.hits;
     }
 
+    /// <summary>블랙홀용: 안쪽으로만 파냄. 림/누적 타격 없음 (스파이크 방지).</summary>
+    public void CarveHole(Vector3 worldPoint, float radiusNorm, float depthNorm)
+    {
+        EnsureReady();
+        if (workingCrust == null || !UvLockIntact(workingCrust))
+            return;
+
+        Vector3 local = transform.InverseTransformPoint(worldPoint);
+        if (local.sqrMagnitude < 1e-8f)
+            return;
+
+        float depth = Mathf.Clamp(depthNorm, 0.01f, 0.22f);
+        float radius = Mathf.Clamp(radiusNorm, 0.04f, 0.32f);
+        DeformVerticesOnly(workingCrust, local.normalized, radius, depth, 0f, HashDir(local.normalized), minShellRadius);
+
+        if (!UvLockIntact(workingCrust))
+        {
+            Debug.LogError("[EarthCraterDeform] CarveHole corrupted UVs.");
+            ready = false;
+            workingCrust = null;
+            return;
+        }
+
+        RefreshCollider();
+    }
+
+    /// <summary>의도적 스파이크: 지표가 밖으로 삐죽 솟아오름.</summary>
+    public void SpikeErupt(Vector3 worldPoint, float radiusNorm, float heightNorm, int seed = 0)
+    {
+        EnsureReady();
+        if (workingCrust == null || !UvLockIntact(workingCrust))
+            return;
+
+        Vector3 local = transform.InverseTransformPoint(worldPoint);
+        if (local.sqrMagnitude < 1e-8f)
+            return;
+
+        if (seed == 0)
+            seed = HashDir(local.normalized) ^ 0x51CE;
+
+        float height = Mathf.Clamp(heightNorm, 0.08f, 0.85f);
+        float radius = Mathf.Clamp(radiusNorm, 0.06f, 0.28f);
+        DeformSpikeOut(workingCrust, local.normalized, radius, height, seed, 1.85f);
+
+        if (!UvLockIntact(workingCrust))
+        {
+            Debug.LogError("[EarthCraterDeform] SpikeErupt corrupted UVs.");
+            ready = false;
+            workingCrust = null;
+            return;
+        }
+
+        RefreshCollider();
+    }
+
     bool UvLockIntact(Mesh mesh)
     {
         if (mesh == null)
@@ -286,6 +341,81 @@ public class EarthCraterDeform : MonoBehaviour
 
         mesh.vertices = verts;
         // UV/triangles 강제 유지 — 투명 지구 방지의 핵심
+        mesh.uv = uvLock;
+        mesh.triangles = triLock;
+        mesh.RecalculateNormals();
+        mesh.RecalculateBounds();
+        mesh.RecalculateTangents();
+    }
+
+    /// <summary>밖으로 뾰족하게 밀어내는 변형 (블랙홀 버그 연출을 무기로).</summary>
+    static void DeformSpikeOut(
+        Mesh mesh, Vector3 impactDir, float craterAngle, float heightFrac, int seed, float maxRadius)
+    {
+        Vector2[] uvLock = mesh.uv;
+        int[] triLock = mesh.triangles;
+
+        var rng = new System.Random(seed);
+        float rot = (float)(rng.NextDouble() * Mathf.PI * 2.0);
+        int lobes = 3 + rng.Next(0, 4);
+        float lobeSharp = Mathf.Lerp(2.2f, 4.5f, (float)rng.NextDouble());
+        float tipBias = Mathf.Lerp(0.55f, 1.15f, (float)rng.NextDouble());
+
+        Vector3 tAxis = Vector3.Cross(impactDir, Vector3.up);
+        if (tAxis.sqrMagnitude < 1e-4f)
+            tAxis = Vector3.Cross(impactDir, Vector3.right);
+        tAxis.Normalize();
+        Vector3 bAxis = Vector3.Cross(impactDir, tAxis).normalized;
+        Vector3 axisA = (tAxis * Mathf.Cos(rot) + bAxis * Mathf.Sin(rot)).normalized;
+        Vector3 axisB = (bAxis * Mathf.Cos(rot) - tAxis * Mathf.Sin(rot)).normalized;
+
+        var verts = mesh.vertices;
+        bool changed = false;
+        float craterRad = Mathf.Clamp(craterAngle, 0.05f, 0.35f);
+
+        for (int i = 0; i < verts.Length; i++)
+        {
+            Vector3 v = verts[i];
+            float len = v.magnitude;
+            if (len < 1e-6f)
+                continue;
+
+            Vector3 n = v / len;
+            float dot = Mathf.Clamp(Vector3.Dot(n, impactDir), -1f, 1f);
+            float ang = Mathf.Acos(dot);
+            float t = ang / Mathf.Max(1e-4f, craterRad);
+            if (t > 1.25f)
+                continue;
+
+            Vector3 tangential = n - impactDir * dot;
+            float phi = 0f;
+            if (tangential.sqrMagnitude > 1e-8f)
+            {
+                tangential.Normalize();
+                phi = Mathf.Atan2(Vector3.Dot(tangential, axisB), Vector3.Dot(tangential, axisA));
+            }
+
+            float fall = 1f - Mathf.Clamp01(t);
+            fall = fall * fall * (3f - 2f * fall);
+
+            // 로브마다 뾰족한 가시
+            float lobe = Mathf.Pow(Mathf.Abs(Mathf.Cos(0.5f * lobes * phi)), lobeSharp);
+            float spike = fall * (0.25f + 0.75f * lobe) * tipBias;
+            // 중심도 약간 솟아 기둥처럼
+            float core = fall * fall * 0.35f;
+            float radialDelta = heightFrac * len * (spike + core);
+
+            if (radialDelta < 1e-6f)
+                continue;
+
+            verts[i] = n * Mathf.Min(maxRadius, len + radialDelta);
+            changed = true;
+        }
+
+        if (!changed)
+            return;
+
+        mesh.vertices = verts;
         mesh.uv = uvLock;
         mesh.triangles = triLock;
         mesh.RecalculateNormals();
