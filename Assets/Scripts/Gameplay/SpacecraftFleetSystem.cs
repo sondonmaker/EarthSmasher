@@ -286,7 +286,7 @@ public class SpacecraftFleetSystem : MonoBehaviour
 
     IEnumerator SummonFighterWing()
     {
-        // 타겟을 스치듯 통과(스트레이핑) 후 퇴장
+        // 낮게 깔려 착륙하듯 폭격 → 나비처럼 솟아 퇴장
         Vector3 dir = FaceDir();
         Vector3 center = earth.transform.position;
         float R = earth.Radius;
@@ -298,73 +298,80 @@ public class SpacecraftFleetSystem : MonoBehaviour
         flyDir.Normalize();
         Vector3 wingAxis = Vector3.Cross(flyDir, dir).normalized;
 
-        Vector3 start = target - flyDir * (R * 3.4f) + dir * (R * 1.6f);
-        Vector3 end = target + flyDir * (R * 3.6f) + dir * (R * 1.35f);
-
         var root = new GameObject("FighterWing");
         var fighters = new Transform[5];
-        float[] lane = { -0.55f, -0.25f, 0f, 0.25f, 0.55f };
-        float[] lag = { 0.08f, 0.03f, 0f, 0.03f, 0.08f };
+        float[] lane = { -0.5f, -0.22f, 0f, 0.22f, 0.5f };
+        float[] lag = { 0.06f, 0.025f, 0f, 0.025f, 0.06f };
+
+        // 시작: 아직 조금 높은 접근
+        Vector3 startSurf = (target - flyDir * (R * 2.1f) - center).normalized;
+        Vector3 start = center + startSurf * (R * 1.38f);
 
         for (int i = 0; i < fighters.Length; i++)
         {
-            Vector3 offset = wingAxis * (lane[i] * R * 0.22f) - flyDir * (lag[i] * R);
-            var f = Prim(PrimitiveType.Cube, "Fighter", start + offset, new Vector3(0.1f, 0.035f, 0.2f),
-                new Color(0.9f, 0.55f, 0.2f), 0.8f);
+            Vector3 offset = wingAxis * (lane[i] * R * 0.12f);
+            var f = Prim(PrimitiveType.Cube, "Fighter", start + offset, new Vector3(0.11f, 0.04f, 0.22f),
+                new Color(0.9f, 0.55f, 0.2f), 0.9f);
             f.transform.SetParent(root.transform, true);
-            f.transform.rotation = Quaternion.LookRotation(flyDir, dir);
             fighters[i] = f.transform;
         }
 
-        float duration = 3.2f;
+        float duration = 3.8f;
         float t = 0f;
-        bool volleyA = false;
-        bool volleyB = false;
-        bool volleyC = false;
+        bool volleyA = false, volleyB = false, volleyC = false, volleyD = false;
 
         while (t < duration && root != null)
         {
             t += Time.deltaTime;
             float u = Mathf.Clamp01(t / duration);
-            // 가속 통과감
-            float ease = u * u * (3f - 2f * u);
+            // 초반 조금 느리다가 통과 후 가속 퇴장
+            float ease = u < 0.55f
+                ? Mathf.SmoothStep(0f, 0.55f, u) / 0.55f * 0.55f
+                : 0.55f + Mathf.SmoothStep(0f, 1f, (u - 0.55f) / 0.45f) * 0.45f;
+
+            // 고도: 접근 → 거의 착륙(스킴) → 급상승 퇴장
+            float altMul;
+            if (u < 0.28f)
+                altMul = Mathf.Lerp(1.42f, 1.08f, u / 0.28f);
+            else if (u < 0.62f)
+                altMul = Mathf.Lerp(1.08f, 1.035f, (u - 0.28f) / 0.34f); // 지표면에 바짝
+            else
+                altMul = Mathf.Lerp(1.035f, 2.15f, Mathf.Pow((u - 0.62f) / 0.38f, 0.85f)); // 나비처럼 솟음
+
+            float along = Mathf.Lerp(-2.0f, 2.3f, ease); // 타겟 기준 진행(R 배수)
 
             for (int i = 0; i < fighters.Length; i++)
             {
                 if (fighters[i] == null)
                     continue;
-                float ui = Mathf.Clamp01(ease - lag[i] * 0.15f);
-                Vector3 offset = wingAxis * (lane[i] * R * 0.22f);
-                // 타겟 근처에서 살짝 낮게 깔림
-                float dip = Mathf.Sin(ui * Mathf.PI) * (R * 0.35f);
-                Vector3 pos = Vector3.Lerp(start, end, ui) + offset - dir * dip * 0.15f + dir * (R * 0.05f);
-                // 표면 위로 유지
-                Vector3 fromCenter = pos - center;
-                float minAlt = R * 1.12f;
-                if (fromCenter.magnitude < minAlt)
-                    pos = center + fromCenter.normalized * minAlt;
 
+                float ui = Mathf.Clamp01(ease - lag[i] * 0.12f);
+                float alongI = Mathf.Lerp(-2.0f, 2.3f, ui);
+                float altI = altMul + lag[i] * 0.02f;
+
+                Vector3 ground = target + flyDir * (alongI * R) + wingAxis * (lane[i] * R * 0.1f);
+                Vector3 radial = (ground - center).normalized;
+                Vector3 pos = center + radial * (R * altI);
+
+                // 진행 방향 (다음 샘플)
+                float alongNext = Mathf.Lerp(-2.0f, 2.3f, Mathf.Clamp01(ui + 0.04f));
+                Vector3 groundNext = target + flyDir * (alongNext * R);
+                Vector3 posNext = center + (groundNext - center).normalized * (R * altI);
+                Vector3 look = (posNext - pos).normalized;
+                if (look.sqrMagnitude < 1e-6f)
+                    look = flyDir;
+
+                // 다이브 때는 코를 아래로, 상승 때는 위로
+                float pitch = u < 0.55f ? -12f : Mathf.Lerp(-4f, 18f, (u - 0.55f) / 0.45f);
                 fighters[i].position = pos;
-                Vector3 look = (end - start).normalized;
-                fighters[i].rotation = Quaternion.LookRotation(look, dir);
+                fighters[i].rotation = Quaternion.LookRotation(look, radial) * Quaternion.Euler(pitch, 0f, lane[i] * 8f);
             }
 
-            // 타겟 통과 구간에서 연사
-            if (!volleyA && u > 0.38f)
-            {
-                volleyA = true;
-                FireStrafe(root.transform, target, dir, 0.55f);
-            }
-            if (!volleyB && u > 0.48f)
-            {
-                volleyB = true;
-                FireStrafe(root.transform, target + flyDir * (R * 0.08f), dir, 0.7f);
-            }
-            if (!volleyC && u > 0.58f)
-            {
-                volleyC = true;
-                FireStrafe(root.transform, target - flyDir * (R * 0.06f), dir, 0.5f);
-            }
+            // 초저공 구간에서 벌처럼 연사
+            if (!volleyA && u > 0.30f) { volleyA = true; FireStrafe(root.transform, target - flyDir * (R * 0.06f), dir, 0.55f); }
+            if (!volleyB && u > 0.40f) { volleyB = true; FireStrafe(root.transform, target, dir, 0.85f); }
+            if (!volleyC && u > 0.48f) { volleyC = true; FireStrafe(root.transform, target + flyDir * (R * 0.05f), dir, 0.7f); }
+            if (!volleyD && u > 0.56f) { volleyD = true; FireStrafe(root.transform, target + flyDir * (R * 0.1f), dir, 0.5f); }
 
             yield return null;
         }
