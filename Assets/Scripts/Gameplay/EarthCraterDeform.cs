@@ -163,7 +163,7 @@ public class EarthCraterDeform : MonoBehaviour
 
             for (int s = 0; s < steps; s++)
             {
-                float t = s / (float)(steps - 1);
+                float t = steps <= 1 ? 0f : s / (float)(steps - 1);
                 Vector3 dir = Vector3.Slerp(center, grooveEnd, t).normalized;
                 float falloff = 1f - t * 0.35f;
                 DeformVerticesOnly(
@@ -173,6 +173,71 @@ public class EarthCraterDeform : MonoBehaviour
                     depth * falloff,
                     0f,
                     seed + i * 131 + s * 17,
+                    minShellRadius);
+            }
+        }
+
+        if (!UvLockIntact(workingCrust))
+        {
+            ready = false;
+            workingCrust = null;
+            return;
+        }
+
+        RefreshCollider();
+    }
+
+    /// <summary>평행 발톱 — scratchAxis 방향으로 clawCount 줄의 긴 홈.</summary>
+    public void ScratchGroovesParallel(
+        Vector3 worldPoint, Vector3 worldNormal, Vector3 scratchAxisWorld,
+        int clawCount, float lengthNorm, float spreadNorm, float depthNorm,
+        int seed = 0, int maxStepsPerSlash = 0)
+    {
+        EnsureReady();
+        if (workingCrust == null || !UvLockIntact(workingCrust))
+            return;
+
+        Vector3 local = transform.InverseTransformPoint(worldPoint);
+        if (local.sqrMagnitude < 1e-8f)
+            return;
+
+        Vector3 center = local.normalized;
+        Vector3 axis = Vector3.ProjectOnPlane(transform.InverseTransformDirection(scratchAxisWorld), center);
+        if (axis.sqrMagnitude < 1e-4f)
+            axis = Vector3.Cross(center, Vector3.up);
+        axis.Normalize();
+        Vector3 spreadDir = Vector3.Cross(center, axis).normalized;
+
+        if (seed == 0)
+            seed = HashDir(center) ^ 0xCA71;
+
+        clawCount = Mathf.Clamp(clawCount, 2, 5);
+        float length = Mathf.Clamp(lengthNorm, 0.08f, 0.24f);
+        float laneSpread = Mathf.Clamp(spreadNorm, 0.015f, 0.055f);
+        float depth = Mathf.Clamp(depthNorm, 0.018f, 0.075f);
+        float grooveW = Mathf.Clamp(length * 0.14f, 0.014f, 0.042f);
+        int steps = maxStepsPerSlash > 0
+            ? maxStepsPerSlash
+            : Mathf.Max(10, Mathf.RoundToInt(length * 140f));
+
+        for (int i = 0; i < clawCount; i++)
+        {
+            float lane = (i - (clawCount - 1) * 0.5f) * laneSpread;
+            Vector3 startDir = (center + spreadDir * lane).normalized;
+            Vector3 endDir = (center + spreadDir * lane + axis * length).normalized;
+
+            for (int s = 0; s < steps; s++)
+            {
+                float t = steps <= 1 ? 0f : s / (float)(steps - 1);
+                Vector3 dir = Vector3.Slerp(startDir, endDir, t).normalized;
+                float falloff = 1f - t * 0.25f;
+                DeformVerticesOnly(
+                    workingCrust,
+                    dir,
+                    grooveW * (0.9f + 0.1f * (1f - t)),
+                    depth * falloff,
+                    0f,
+                    seed + i * 173 + s * 19,
                     minShellRadius);
             }
         }

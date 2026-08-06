@@ -40,6 +40,12 @@ public class OrbitCamera : MonoBehaviour
     float _chaseDistance;
     float _chaseSide;
 
+    bool _surfaceFocus;
+    Vector3 _focusFromPos;
+    Vector3 _focusToPos;
+    Vector3 _focusLookAt;
+    float _focusLockUntil;
+
     public float Distance => distance;
     public float MinDistance => minDistance;
     public float MaxDistance => maxDistance;
@@ -169,14 +175,15 @@ public class OrbitCamera : MonoBehaviour
         _dragging = false;
     }
 
-    /// <summary>밈 빌보드(트럼프 등)가 지구와 함께 잘 보이도록 해당 면을 바라보며 줌아웃.</summary>
-    public void FrameMemeBillboard(Vector3 surfaceNormalWorld, float heightAboveSurfaceMul, float duration = 0.95f)
+    /// <summary>클릭한 지표면 지점을 화면 중앙에 — yaw/pitch 클램프 오차 없이 직접 이동.</summary>
+    public void FocusOnSurfaceHit(Vector3 worldHit, float heightAboveSurfaceMul = 0.22f, float duration = 0.45f)
     {
         if (target == null)
             return;
 
-        Vector3 n = surfaceNormalWorld.normalized;
-        if (n.sqrMagnitude < 1e-6f)
+        Vector3 center = target.position;
+        Vector3 toHit = worldHit - center;
+        if (toHit.sqrMagnitude < 1e-6f)
             return;
 
         float planetR = 2.5f;
@@ -184,27 +191,43 @@ public class OrbitCamera : MonoBehaviour
         if (earth != null)
             planetR = earth.Radius;
 
-        Vector3 toCam = n;
-        _focusYaw = Mathf.Atan2(toCam.x, toCam.z) * Mathf.Rad2Deg;
-        _focusPitch = Mathf.Asin(Mathf.Clamp(toCam.y, -1f, 1f)) * Mathf.Rad2Deg;
-        _focusPitch = Mathf.Clamp(_focusPitch, minPitch, maxPitch);
-
+        Vector3 outward = toHit.normalized;
         float fov = Camera.main != null ? Camera.main.fieldOfView : 50f;
         float half = Mathf.Tan(0.5f * fov * Mathf.Deg2Rad);
-        // 지구 기본 구도에서 살짝만 멀리 + 빌보드 높이만큼 여유
-        float baseDist = (planetR / Mathf.Max(0.05f, half)) / 0.56f;
-        float billExtra = planetR * heightAboveSurfaceMul * 0.16f;
-        _focusDistance = Mathf.Clamp(baseDist + billExtra, minDistance, maxDistance);
+        float wantDist = (planetR / Mathf.Max(0.05f, half)) / 0.62f + planetR * heightAboveSurfaceMul * 0.12f;
+        wantDist = Mathf.Clamp(wantDist, minDistance, maxDistance);
 
-        _fromYaw = yaw;
-        _fromPitch = pitch;
-        _fromDistance = distance;
-        _focusYaw = _fromYaw + Mathf.DeltaAngle(_fromYaw, _focusYaw);
+        _focusFromPos = transform.position;
+        _focusToPos = center + outward * wantDist;
+        _focusLookAt = worldHit + outward * (planetR * heightAboveSurfaceMul);
         _focusDuration = Mathf.Max(0.05f, duration);
         _focusT = 0f;
         _focusing = true;
+        _surfaceFocus = true;
         _chasing = false;
         _dragging = false;
+        _focusLockUntil = Time.unscaledTime + _focusDuration + 0.2f;
+    }
+
+    /// <summary>밈 빌보드(트럼프 등)가 지구와 함께 잘 보이도록 해당 면을 바라보며 줌아웃.</summary>
+    public void FrameMemeBillboard(Vector3 surfaceNormalWorld, float heightAboveSurfaceMul, float duration = 0.95f)
+    {
+        if (target == null)
+            return;
+
+        float planetR = 2.5f;
+        var earth = target.GetComponent<EarthPlanet>();
+        if (earth != null)
+            planetR = earth.Radius;
+
+        Vector3 worldHit = target.position + surfaceNormalWorld.normalized * planetR;
+        FocusOnSurfaceHit(worldHit, heightAboveSurfaceMul, duration);
+    }
+
+    void EndSurfaceFocus()
+    {
+        _surfaceFocus = false;
+        ResyncOrbitFromPose();
     }
 
     /// <summary>시작 시 지구를 크게, 줌아웃하면 은하가 보이게 범위 설정.</summary>
@@ -262,18 +285,33 @@ public class OrbitCamera : MonoBehaviour
         {
             _focusT += Time.unscaledDeltaTime / _focusDuration;
             float u = Mathf.SmoothStep(0f, 1f, Mathf.Clamp01(_focusT));
-            yaw = Mathf.Lerp(_fromYaw, _focusYaw, u);
-            pitch = Mathf.Lerp(_fromPitch, _focusPitch, u);
-            distance = Mathf.Lerp(_fromDistance, _focusDistance, u);
-            if (_focusT >= 1f)
-                _focusing = false;
+
+            if (_surfaceFocus)
+            {
+                transform.position = Vector3.Lerp(_focusFromPos, _focusToPos, u);
+                transform.LookAt(_focusLookAt);
+                if (_focusT >= 1f)
+                {
+                    _focusing = false;
+                    EndSurfaceFocus();
+                }
+            }
+            else
+            {
+                yaw = Mathf.Lerp(_fromYaw, _focusYaw, u);
+                pitch = Mathf.Lerp(_fromPitch, _focusPitch, u);
+                distance = Mathf.Lerp(_fromDistance, _focusDistance, u);
+                if (_focusT >= 1f)
+                    _focusing = false;
+            }
         }
 
         HandleZoom();
         if (!_focusing && !uiBlocks)
             HandleOrbit();
 
-        ApplyTransform();
+        if (!_surfaceFocus || !_focusing)
+            ApplyTransform();
     }
 
     void ApplyChaseTransform()
@@ -344,6 +382,9 @@ public class OrbitCamera : MonoBehaviour
 
     bool WantsOrbitInterrupt()
     {
+        if (Time.unscaledTime < _focusLockUntil)
+            return false;
+
         var mouse = Mouse.current;
         if (mouse != null)
         {

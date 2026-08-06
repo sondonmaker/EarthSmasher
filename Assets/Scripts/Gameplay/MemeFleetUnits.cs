@@ -392,18 +392,16 @@ public class MemeCatUnit : MemeUnitBase
         float R = earth.Radius;
         int seed = GetInstanceID() + attackCount * 41;
 
-        lungeT = 0.13f;
-        MemeAttackSystem.CatScratch(earth, hit, n, ref digRadius, ref digDepth, attackCount, seed);
-
+        lungeT = 0.15f;
         clawFlip ^= 1;
-        float slashAng = clawFlip == 0 ? -22f : 20f;
+        float slashAng = clawFlip == 0 ? -32f : 30f;
         Vector3 slashDir = (Quaternion.AngleAxis(slashAng, n) * scratchTangent).normalized;
-        var claw = MemeVisuals.CreateClawSwipe(R * (0.16f + digRadius * 0.35f), R * 0.024f);
-        claw.transform.position = hit + slashDir * (R * 0.02f) + n * (R * 0.006f);
-        claw.transform.rotation = Quaternion.LookRotation(slashDir, n);
+        MemeAttackSystem.CatScratch(earth, hit, n, slashDir, ref digRadius, ref digDepth, attackCount, seed);
 
-        if (attackCount % 2 == 0)
-            CameraShake.Shake(0.06f, 0.045f);
+        float rakeLen = R * (0.32f + digRadius * 0.55f);
+        float rakeSpread = R * (0.055f + digRadius * 0.4f);
+        MemeVisuals.SpawnClawRake(hit, n, slashDir, rakeLen, rakeSpread, R * 0.006f);
+
         if (attackCount % 4 == 0)
             MemeAttackSystem.ApplyCasualtiesStatic(0.00035f);
         RegisterAttack();

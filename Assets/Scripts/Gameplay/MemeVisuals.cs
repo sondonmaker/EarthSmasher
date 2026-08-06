@@ -2,6 +2,13 @@ using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.Rendering;
 
+public enum TrojanSoldierKind
+{
+    Sword,
+    Spear,
+    Bow
+}
+
 /// <summary>밈 무기용 절차적 비주얼 — 외부 텍스처 없이 런타임 생성.</summary>
 public static class MemeVisuals
 {
@@ -10,12 +17,17 @@ public static class MemeVisuals
     static Texture2D penguCoinTex;
     static Texture2D penguHeroTex;
     static Texture2D trumpPoseTex;
+    static Texture2D trumpMarketCrashTex;
     static Texture2D tariffTex;
     static Texture2D dogeTex;
     static Texture2D pepeTex;
     static Texture2D pepePoseTex;
     static Texture2D sneakerSharkTex;
     static Texture2D cowTex;
+    static Texture2D trojanHorseTex;
+    static Texture2D trojanSoldierSwordTex;
+    static Texture2D trojanSoldierSpearTex;
+    static Texture2D trojanSoldierBowTex;
     static Texture2D catTex;
     static Texture2D catPoseTex;
     static Mesh coinMesh;
@@ -48,8 +60,54 @@ public static class MemeVisuals
         return dogeCoinTex;
     }
 
-    /// <summary>체커보드/회색 배경 제거 + 가장자리 flood-fill — 진짜 투명 PNG 전까지.</summary>
+    /// <summary>기본 밈 PNG — 가장자리 flood-fill만 (예전 방식).</summary>
     static Texture2D PrepareCoinTexture(Texture2D src)
+    {
+        var tex = BlitToReadableTexture(src);
+        int w = tex.width;
+        int h = tex.height;
+        var px = tex.GetPixels();
+        var bg = new bool[px.Length];
+        for (int i = 0; i < px.Length; i++)
+            bg[i] = IsMemeBackgroundPixel(px[i]);
+
+        FloodClearBackground(px, bg, w, h);
+
+        tex.SetPixels(px);
+        tex.Apply(false, false);
+        FinalizeMemeTexture(tex);
+        return tex;
+    }
+
+    /// <summary>트로이 목마/병사 — 체커 pocket + fringe 제거 (강화).</summary>
+    static Texture2D PrepareTrojanTexture(Texture2D src)
+    {
+        var tex = BlitToReadableTexture(src);
+        int w = tex.width;
+        int h = tex.height;
+        var px = tex.GetPixels();
+        var bg = new bool[px.Length];
+        for (int i = 0; i < px.Length; i++)
+            bg[i] = IsTrojanBackgroundPixel(px[i]);
+
+        FloodClearBackground(px, bg, w, h);
+
+        for (int i = 0; i < px.Length; i++)
+        {
+            if (IsTrojanCheckerboardPixel(px[i]))
+                px[i] = Color.clear;
+        }
+
+        RemoveAlphaFringe(px, w, h);
+        RemoveAlphaFringe(px, w, h);
+
+        tex.SetPixels(px);
+        tex.Apply(false, false);
+        FinalizeMemeTexture(tex);
+        return tex;
+    }
+
+    static Texture2D BlitToReadableTexture(Texture2D src)
     {
         var rt = RenderTexture.GetTemporary(src.width, src.height, 0, RenderTextureFormat.ARGB32);
         Graphics.Blit(src, rt);
@@ -60,14 +118,11 @@ public static class MemeVisuals
         tex.Apply();
         RenderTexture.active = prev;
         RenderTexture.ReleaseTemporary(rt);
+        return tex;
+    }
 
-        int w = tex.width;
-        int h = tex.height;
-        var px = tex.GetPixels();
-        var bg = new bool[px.Length];
-        for (int i = 0; i < px.Length; i++)
-            bg[i] = IsMemeBackgroundPixel(px[i]);
-
+    static void FloodClearBackground(Color[] px, bool[] bg, int w, int h)
+    {
         var q = new Queue<int>();
         void TrySeed(int x, int y)
         {
@@ -93,7 +148,7 @@ public static class MemeVisuals
             if (!bg[i])
                 continue;
             bg[i] = false;
-            px[i] = new Color(0f, 0f, 0f, 0f);
+            px[i] = Color.clear;
 
             int x = i % w;
             int y = i / w;
@@ -109,11 +164,90 @@ public static class MemeVisuals
             if (bg[j])
                 q.Enqueue(j);
         }
+    }
 
-        tex.SetPixels(px);
-        tex.Apply(false, false);
-        FinalizeMemeTexture(tex);
-        return tex;
+    static void RemoveAlphaFringe(Color[] px, int w, int h)
+    {
+        var src = (Color[])px.Clone();
+        for (int y = 0; y < h; y++)
+        {
+            for (int x = 0; x < w; x++)
+            {
+                int i = y * w + x;
+                if (src[i].a < 0.04f)
+                    continue;
+
+                bool nearClear = false;
+                for (int dy = -1; dy <= 1 && !nearClear; dy++)
+                {
+                    for (int dx = -1; dx <= 1; dx++)
+                    {
+                        if (dx == 0 && dy == 0)
+                            continue;
+                        int nx = x + dx;
+                        int ny = y + dy;
+                        if (nx < 0 || nx >= w || ny < 0 || ny >= h)
+                        {
+                            nearClear = true;
+                            break;
+                        }
+
+                        if (src[ny * w + nx].a < 0.08f)
+                        {
+                            nearClear = true;
+                            break;
+                        }
+                    }
+                }
+
+                if (nearClear && IsFringeBackgroundPixel(src[i]))
+                    px[i] = Color.clear;
+            }
+        }
+    }
+
+    static bool IsFringeBackgroundPixel(Color c)
+    {
+        if (c.a < 0.05f)
+            return true;
+        if (c.r > 0.88f && c.g > 0.88f && c.b > 0.88f)
+            return true;
+        return IsTrojanCheckerboardPixel(c) || IsTrojanBackgroundPixel(c);
+    }
+
+    static bool IsTrojanBackgroundPixel(Color c)
+    {
+        if (c.a < 0.05f)
+            return true;
+        if (c.r > 0.93f && c.g > 0.93f && c.b > 0.93f)
+            return true;
+
+        float max = Mathf.Max(c.r, Mathf.Max(c.g, c.b));
+        float min = Mathf.Min(c.r, Mathf.Min(c.g, c.b));
+        float sat = max - min;
+        if (sat < 0.1f)
+        {
+            float gray = (c.r + c.g + c.b) / 3f;
+            if (gray > 0.42f && gray < 0.92f)
+                return true;
+        }
+
+        return IsTrojanCheckerboardPixel(c);
+    }
+
+    static bool IsTrojanCheckerboardPixel(Color c)
+    {
+        if (c.a < 0.05f)
+            return false;
+        if (c.r > 0.88f && c.g > 0.88f && c.b > 0.88f)
+            return true;
+
+        float dRG = Mathf.Abs(c.r - c.g);
+        float dGB = Mathf.Abs(c.g - c.b);
+        if (dRG > 0.08f || dGB > 0.08f)
+            return false;
+        float gray = (c.r + c.g + c.b) / 3f;
+        return gray > 0.42f && gray < 0.92f;
     }
 
     static void FinalizeMemeTexture(Texture2D tex)
@@ -181,7 +315,9 @@ public static class MemeVisuals
 
     public static GameObject CreateElonDogeRide(float size)
     {
-        return CreateBillboard("MemeElonDoge", size, 1.62f, LoadElonDogeTexture(), new Color(0.55f, 0.75f, 1f));
+        var go = CreateBillboard("MemeElonDoge", size, 1.62f, LoadElonDogeTexture(), new Color(0.55f, 0.75f, 1f));
+        SetBillboardOnTop(go);
+        return go;
     }
 
     public static GameObject CreatePenguHero(float size)
@@ -191,7 +327,16 @@ public static class MemeVisuals
 
     public static GameObject CreateTrumpBillboard(float size)
     {
-        return CreateBillboard("MemeTrump", size, 0.72f, LoadTrumpTexture(), new Color(1f, 0.62f, 0.32f));
+        var go = CreateBillboard("MemeTrump", size, 1.43f, LoadTrumpTexture(), new Color(1f, 0.62f, 0.32f));
+        SetBillboardOnTop(go);
+        return go;
+    }
+
+    public static GameObject CreateTrumpMarketCrashBillboard(float size)
+    {
+        var go = CreateBillboard("MemeTrumpCrash", size, 1.28f, LoadTrumpMarketCrashTexture(), new Color(1f, 0.62f, 0.32f));
+        SetBillboardOnTop(go);
+        return go;
     }
 
     public static GameObject CreateTariffCoin(float diameter)
@@ -199,15 +344,48 @@ public static class MemeVisuals
         return CreateTexturedCoin(diameter, LoadTariffTexture(), "TariffCoin");
     }
 
+    public static GameObject CreateRedStockTile(float size)
+    {
+        var go = GameObject.CreatePrimitive(PrimitiveType.Cube);
+        go.name = "RedStockTile";
+        Object.Destroy(go.GetComponent<Collider>());
+        var mr = go.GetComponent<Renderer>();
+        var col = new Color(
+            Random.Range(0.82f, 1f),
+            Random.Range(0.04f, 0.18f),
+            Random.Range(0.04f, 0.14f),
+            1f);
+        mr.material = RuntimeMaterial.Opaque(col);
+        mr.shadowCastingMode = ShadowCastingMode.Off;
+        float aspect = Random.Range(0.85f, 1.45f);
+        go.transform.localScale = new Vector3(size * aspect, size * 0.14f, size);
+        return go;
+    }
+
     static Texture2D LoadTrumpTexture()
     {
         if (trumpPoseTex != null)
             return trumpPoseTex;
-        var src = Resources.Load<Texture2D>("Meme/trump_pose");
+        var src = Resources.Load<Texture2D>("Meme/trump_tariff");
+        if (src == null)
+            src = Resources.Load<Texture2D>("Meme/trump_pose");
         if (src == null)
             return null;
         trumpPoseTex = PrepareCoinTexture(src);
         return trumpPoseTex;
+    }
+
+    static Texture2D LoadTrumpMarketCrashTexture()
+    {
+        if (trumpMarketCrashTex != null)
+            return trumpMarketCrashTex;
+        var src = Resources.Load<Texture2D>("Meme/trump_market_crash");
+        if (src == null)
+            src = Resources.Load<Texture2D>("Meme/trump_pose");
+        if (src == null)
+            return null;
+        trumpMarketCrashTex = PrepareCoinTexture(src);
+        return trumpMarketCrashTex;
     }
 
     static Texture2D LoadTariffTexture()
@@ -248,6 +426,19 @@ public static class MemeVisuals
         trail.material = RuntimeMaterial.UnlitTransparent(new Color(1f, 0.45f, 0.08f, 0.8f));
         trail.startColor = new Color(1f, 0.65f, 0.15f, 0.85f);
         trail.endColor = new Color(0.8f, 0.1f, 0.02f, 0f);
+        trail.minVertexDistance = 0.04f;
+        trail.shadowCastingMode = ShadowCastingMode.Off;
+    }
+
+    public static void AddRedStockTrail(GameObject go, float width)
+    {
+        var trail = go.AddComponent<TrailRenderer>();
+        trail.time = 0.24f;
+        trail.startWidth = width;
+        trail.endWidth = width * 0.05f;
+        trail.material = RuntimeMaterial.UnlitTransparent(new Color(1f, 0.12f, 0.08f, 0.75f));
+        trail.startColor = new Color(1f, 0.22f, 0.12f, 0.8f);
+        trail.endColor = new Color(0.55f, 0.02f, 0.02f, 0f);
         trail.minVertexDistance = 0.04f;
         trail.shadowCastingMode = ShadowCastingMode.Off;
     }
@@ -534,6 +725,75 @@ public static class MemeVisuals
         return go;
     }
 
+    public static GameObject CreateTrojanHorse(float size) =>
+        CreateBillboard("MemeTrojanHorse", size, 0.92f, LoadTrojanHorseTexture(), new Color(0.72f, 0.52f, 0.28f));
+
+    public static GameObject CreateTrojanSoldier(float size, TrojanSoldierKind kind)
+    {
+        GameObject go;
+        switch (kind)
+        {
+            case TrojanSoldierKind.Spear:
+                go = CreateBillboard(
+                    "MemeTrojanSpear", size, 0.72f, LoadTrojanSoldierSpearTexture(), new Color(0.78f, 0.55f, 0.32f));
+                break;
+            case TrojanSoldierKind.Bow:
+                go = CreateBillboard(
+                    "MemeTrojanBow", size, 0.88f, LoadTrojanSoldierBowTexture(), new Color(0.78f, 0.55f, 0.32f));
+                break;
+            default:
+                go = CreateBillboard(
+                    "MemeTrojanSword", size, 0.72f, LoadTrojanSoldierSwordTexture(), new Color(0.78f, 0.55f, 0.32f));
+                break;
+        }
+
+        SetBillboardOnTop(go);
+        return go;
+    }
+
+    static void SetBillboardOnTop(GameObject go)
+    {
+        var mr = go.GetComponent<MeshRenderer>();
+        if (mr != null && mr.material != null)
+            mr.material.renderQueue = 3100;
+    }
+
+    static Texture2D LoadTrojanHorseTexture()
+    {
+        if (trojanHorseTex != null)
+            return trojanHorseTex;
+        var src = Resources.Load<Texture2D>("Meme/trojan_horse");
+        trojanHorseTex = src != null ? PrepareTrojanTexture(src) : null;
+        return trojanHorseTex;
+    }
+
+    static Texture2D LoadTrojanSoldierSwordTexture()
+    {
+        if (trojanSoldierSwordTex != null)
+            return trojanSoldierSwordTex;
+        var src = Resources.Load<Texture2D>("Meme/trojan_soldier_sword");
+        trojanSoldierSwordTex = src != null ? PrepareCoinTexture(src) : null;
+        return trojanSoldierSwordTex;
+    }
+
+    static Texture2D LoadTrojanSoldierSpearTexture()
+    {
+        if (trojanSoldierSpearTex != null)
+            return trojanSoldierSpearTex;
+        var src = Resources.Load<Texture2D>("Meme/trojan_soldier_spear");
+        trojanSoldierSpearTex = src != null ? PrepareCoinTexture(src) : null;
+        return trojanSoldierSpearTex;
+    }
+
+    static Texture2D LoadTrojanSoldierBowTexture()
+    {
+        if (trojanSoldierBowTex != null)
+            return trojanSoldierBowTex;
+        var src = Resources.Load<Texture2D>("Meme/trojan_soldier_bow");
+        trojanSoldierBowTex = src != null ? PrepareCoinTexture(src) : null;
+        return trojanSoldierBowTex;
+    }
+
     public static GameObject CreateSneakerShark(float scale)
     {
         var tex = LoadSneakerSharkTexture();
@@ -588,12 +848,30 @@ public static class MemeVisuals
         return root;
     }
 
+    /// <summary>거대 발톱 rake — scratchDir 방향 평행 4줄.</summary>
+    public static void SpawnClawRake(Vector3 hit, Vector3 normal, Vector3 scratchDir, float length, float spread, float lift)
+    {
+        Vector3 axis = Vector3.ProjectOnPlane(scratchDir, normal).normalized;
+        if (axis.sqrMagnitude < 1e-4f)
+            return;
+        Vector3 spreadAxis = Vector3.Cross(normal, axis).normalized;
+
+        for (int i = 0; i < 4; i++)
+        {
+            float off = (i - 1.5f) * spread;
+            Vector3 pt = hit + axis * (length * 0.08f) + spreadAxis * off;
+            var claw = CreateClawSwipe(length, spread * 0.38f);
+            claw.transform.position = pt + normal * lift;
+            claw.transform.rotation = Quaternion.LookRotation(axis, normal);
+        }
+    }
+
     public static GameObject CreateClawSwipe(float length, float width)
     {
         if (sharedClawMesh == null)
             sharedClawMesh = BuildClawQuad(1f, 1f);
         if (sharedClawMat == null)
-            sharedClawMat = RuntimeMaterial.UnlitTransparent(new Color(1f, 0.95f, 0.88f, 0.5f));
+            sharedClawMat = RuntimeMaterial.UnlitTransparent(new Color(0.72f, 0.52f, 0.38f, 0.72f));
 
         var go = new GameObject("ClawSwipe");
         var mf = go.AddComponent<MeshFilter>();
@@ -602,7 +880,7 @@ public static class MemeVisuals
         mr.sharedMaterial = sharedClawMat;
         mr.shadowCastingMode = ShadowCastingMode.Off;
         go.transform.localScale = new Vector3(width, length, 1f);
-        go.AddComponent<ClawSwipeFade>().Init(0.28f);
+        go.AddComponent<ClawSwipeFade>().Init(0.38f);
         return go;
     }
 
@@ -696,11 +974,16 @@ public static class MemeVisuals
     public static GameObject CreateCatOrb(float scale)
     {
         var tex = LoadCatPoseTexture();
+        GameObject go;
         if (tex != null)
-            return CreateBillboard("MemeCat", scale, 0.82f, tex, new Color(0.92f, 0.78f, 0.55f));
+            go = CreateBillboard("MemeCat", scale, 0.82f, tex, new Color(0.92f, 0.78f, 0.55f));
+        else
+        {
+            EnsureSphere();
+            go = Body("MemeCat", scale, BuildCatTexture(), new Color(0.92f, 0.78f, 0.55f));
+        }
 
-        EnsureSphere();
-        var go = Body("MemeCat", scale, BuildCatTexture(), new Color(0.92f, 0.78f, 0.55f));
+        SetBillboardOnTop(go);
         return go;
     }
 

@@ -670,6 +670,70 @@ public class EarthSurfaceScorch : MonoBehaviour
         dirty = true;
     }
 
+    /// <summary>평행 발톱 자국 — scratchAxisWorld 방향으로 clawCount 줄.</summary>
+    public void PaintParallelScratches(
+        Vector3 worldPoint, Vector3 worldNormal, Vector3 scratchAxisWorld,
+        int clawCount, float lengthNorm, float spreadNorm, int seed = 0, int maxSteps = 0)
+    {
+        EnsureWorkingTexture();
+        if (working == null || pixels == null)
+            return;
+        if (!TryImpactUv(worldPoint, out int cx, out int cy, out _, out _))
+            return;
+
+        Vector3 axis = Vector3.ProjectOnPlane(scratchAxisWorld, worldNormal).normalized;
+        if (axis.sqrMagnitude < 1e-4f)
+            return;
+        Vector3 spreadW = Vector3.Cross(worldNormal, axis).normalized;
+
+        int w = working.width;
+        int h = working.height;
+        float aspect = h / (float)w;
+
+        if (!TryImpactUv(worldPoint + axis * 0.08f, out int ax, out int ay, out _, out _))
+            return;
+        if (!TryImpactUv(worldPoint + spreadW * 0.04f, out int sx, out int sy, out _, out _))
+            return;
+
+        float ang = Mathf.Atan2((ay - cy) * aspect, ax - cx);
+        float spreadPx = Mathf.Clamp(spreadNorm * w * 0.42f, 6f, w * 0.045f);
+        float lenPx = Mathf.Clamp(lengthNorm * w * 0.72f, 28f, w * 0.24f);
+        clawCount = Mathf.Clamp(clawCount, 2, 5);
+        int steps = maxSteps > 0 ? maxSteps : Mathf.Max(16, Mathf.RoundToInt(lenPx));
+        if (seed == 0)
+            seed = cx * 131 + cy * 17;
+
+        Color32 gouge = new Color32(32, 24, 18, 255);
+        Color32 rim = new Color32(195, 175, 145, 255);
+        Color32 expose = new Color32(88, 58, 38, 255);
+
+        for (int i = 0; i < clawCount; i++)
+        {
+            float lane = (i - (clawCount - 1) * 0.5f) * spreadPx;
+            float ox = cx + Mathf.Cos(ang + Mathf.PI * 0.5f) * lane;
+            float oy = cy + Mathf.Sin(ang + Mathf.PI * 0.5f) * lane * aspect;
+            for (int s = 0; s < steps; s++)
+            {
+                float t = steps <= 1 ? 0f : s / (float)(steps - 1);
+                float x = ox + Mathf.Cos(ang) * (lenPx * t);
+                float y = oy + Mathf.Sin(ang) * (lenPx * t) * aspect;
+                int ix = Mathf.RoundToInt(x);
+                int iy = Mathf.RoundToInt(y);
+                if (iy < 0 || iy >= h)
+                    break;
+                while (ix < 0) ix += w;
+                while (ix >= w) ix -= w;
+                float tip = 1f - t * 0.55f;
+                StampCrack(ix, iy, tip > 0.65f ? 3 : 2, gouge, 0.72f * tip + 0.18f);
+                StampCrack(ix, iy, 1, expose, 0.35f * tip);
+                if (s % 2 == 0)
+                    StampCrack(ix, iy, 0, rim, 0.22f * tip);
+            }
+        }
+
+        dirty = true;
+    }
+
     /// <summary>신발 박힌 자국 — 타원형 청/흰색.</summary>
     public void PaintSneakerPrint(Vector3 worldPoint, float radiusNorm, int seed = 0)
     {

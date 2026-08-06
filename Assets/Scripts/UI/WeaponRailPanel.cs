@@ -178,10 +178,11 @@ public class WeaponRailPanel : MonoBehaviour
                     SubOf("to_the_moon", "T", "To The Moon", MoonRunBusy),
                     SubOf("pengu_coin", "G", "Pengu Coin", PenguBusy),
                     SubOf("trump_tariff", "R", "Trump Tariff", TrumpBusy),
+                    SubOf("trump_market_crash", "C", "Market Crash", TrumpCrashBusy),
                     SubOf("pepe", "P", "Pepe Punch"),
                     SubOf("cat", "=", "Giant Cat"),
                     SubOf("shark", "S", "Sneaker Shark"),
-                    SubOf("earth_cow", "C", "Earth Cow")
+                    SubOf("trojan_horse", "H", "Trojan Horse", TrojanBusy)
                 }
             }
         };
@@ -487,20 +488,25 @@ public class WeaponRailPanel : MonoBehaviour
             case "to_the_moon":
             case "pengu_coin":
             case "trump_tariff":
+            case "trump_market_crash":
+            case "trojan_horse":
             case "pepe":
             case "cat":
             case "shark":
-            case "earth_cow":
                 if (!MemeAttackSystem.Ensure().TryFire(id, point, normal))
                 {
                     if (id == "cat" && MemeCatUnit.ActiveCount >= 1)
                         toast = "Giant Cat already scratching";
                     else if (id == "to_the_moon" && MemeAttackSystem.Instance != null && MemeAttackSystem.Instance.IsMoonRunBusy)
-                        toast = "To The Moon already running";
+                        toast = "Too many To The Moon runs";
                     else if (id == "pengu_coin" && MemeAttackSystem.Instance != null && MemeAttackSystem.Instance.IsPenguRunning)
                         toast = "Pengu Coin already running";
                     else if (id == "trump_tariff" && MemeAttackSystem.Instance != null && MemeAttackSystem.Instance.IsTrumpRunning)
                         toast = "Trump Tariff already running";
+                    else if (id == "trump_market_crash" && MemeAttackSystem.Instance != null && MemeAttackSystem.Instance.IsTrumpCrashRunning)
+                        toast = "Market Crash already running";
+                    else if (id == "trojan_horse" && MemeAttackSystem.Instance != null && MemeAttackSystem.Instance.IsTrojanRunning)
+                        toast = "Trojan Horse already running";
                     else if (id == "doge" && MemeAttackSystem.Instance != null && MemeAttackSystem.Instance.IsDogeRunning)
                         toast = "Doge Strike already running";
                     else if (MemeUnitBase.LiveCount >= 4)
@@ -711,5 +717,17 @@ public class WeaponRailPanel : MonoBehaviour
     {
         var m = MemeAttackSystem.Instance;
         return m != null && m.IsTrumpRunning;
+    }
+
+    static bool TrumpCrashBusy()
+    {
+        var m = MemeAttackSystem.Instance;
+        return m != null && m.IsTrumpCrashRunning;
+    }
+
+    static bool TrojanBusy()
+    {
+        var m = MemeAttackSystem.Instance;
+        return m != null && m.IsTrojanRunning;
     }
 }
