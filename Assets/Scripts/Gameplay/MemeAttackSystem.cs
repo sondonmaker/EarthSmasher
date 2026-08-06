@@ -94,7 +94,7 @@ public class MemeAttackSystem : MonoBehaviour
                     return false;
                 return Summon<MemeCatUnit>(localDir, MemeVisuals.CreateCatOrb(earth.Radius * 0.38f));
             case "shark":
-                return Summon<MemeSharkUnit>(localDir, MemeVisuals.CreateSneakerShark(earth.Radius * 0.32f));
+                return Summon<MemeSharkUnit>(localDir, MemeVisuals.CreateSneakerShark(earth.Radius * 0.52f));
             case "earth_cow":
                 return Summon<MemeCowUnit>(localDir, MemeVisuals.CreateEarthCow(earth.Radius * 0.4f));
             default:
@@ -353,8 +353,17 @@ public class MemeAttackSystem : MonoBehaviour
         Vector3 oppN = DirectionWorld(-localDir);
         Vector3 oppHit = PointOnRay(-localDir, R);
 
-        var trump = MemeVisuals.CreateTrumpBillboard(R * 0.95f);
-        trump.transform.position = hit + n * (R * 2.1f);
+        const float trumpAltMul = 0.22f;
+        var orbitCam = Object.FindObjectOfType<OrbitCamera>();
+        if (orbitCam != null)
+        {
+            orbitCam.FrameMemeBillboard(n, trumpAltMul, 0.95f);
+            yield return new WaitForSeconds(0.95f);
+        }
+
+        var trump = MemeVisuals.CreateTrumpBillboard(R * 0.82f);
+        Vector3 trumpPos = hit + n * (R * trumpAltMul);
+        trump.transform.position = trumpPos;
 
         MemeCaption.Spawn(hit + n * (R * 0.28f), "TARIFFS", new Color(1f, 0.72f, 0.15f), R * 0.14f);
         yield return new WaitForSeconds(0.35f);
@@ -399,7 +408,7 @@ public class MemeAttackSystem : MonoBehaviour
             if (i % 5 == 0)
                 CameraShake.Shake(0.1f + u * 0.08f, 0.07f + u * 0.05f);
 
-            trump.transform.position = Vector3.Lerp(trump.transform.position, hit + n * (R * 1.85f), 0.08f);
+            trump.transform.position = Vector3.Lerp(trump.transform.position, hit + n * (R * 0.16f), 0.08f);
 
             if (i == firePoints / 2)
                 MemeCaption.Spawn(oppHit + oppN * (R * 0.18f), "SANCTIONS", new Color(1f, 0.5f, 0.15f), R * 0.11f);

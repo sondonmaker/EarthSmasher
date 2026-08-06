@@ -13,8 +13,11 @@ public static class MemeVisuals
     static Texture2D tariffTex;
     static Texture2D dogeTex;
     static Texture2D pepeTex;
+    static Texture2D pepePoseTex;
+    static Texture2D sneakerSharkTex;
     static Texture2D cowTex;
     static Texture2D catTex;
+    static Texture2D catPoseTex;
     static Mesh coinMesh;
     static Mesh sharedBillboardMesh;
     static Material coinRimMat;
@@ -108,8 +111,18 @@ public static class MemeVisuals
         }
 
         tex.SetPixels(px);
-        tex.Apply(false, true);
+        tex.Apply(false, false);
+        FinalizeMemeTexture(tex);
         return tex;
+    }
+
+    static void FinalizeMemeTexture(Texture2D tex)
+    {
+        if (tex == null)
+            return;
+        tex.filterMode = FilterMode.Bilinear;
+        tex.anisoLevel = 8;
+        tex.wrapMode = TextureWrapMode.Clamp;
     }
 
     static bool IsMemeBackgroundPixel(Color c)
@@ -168,7 +181,7 @@ public static class MemeVisuals
 
     public static GameObject CreateElonDogeRide(float size)
     {
-        return CreateBillboard("MemeElonDoge", size, 1.45f, LoadElonDogeTexture(), new Color(0.55f, 0.75f, 1f));
+        return CreateBillboard("MemeElonDoge", size, 1.62f, LoadElonDogeTexture(), new Color(0.55f, 0.75f, 1f));
     }
 
     public static GameObject CreatePenguHero(float size)
@@ -505,6 +518,10 @@ public static class MemeVisuals
 
     public static GameObject CreatePepe(float scale)
     {
+        var tex = LoadPepePoseTexture();
+        if (tex != null)
+            return CreateBillboard("MemePepe", scale, 0.78f, tex, new Color(0.35f, 0.78f, 0.28f));
+
         EnsureSphere();
         var go = Body("MemePepe", scale, BuildPepeTexture(), new Color(0.35f, 0.78f, 0.28f));
         return go;
@@ -519,6 +536,10 @@ public static class MemeVisuals
 
     public static GameObject CreateSneakerShark(float scale)
     {
+        var tex = LoadSneakerSharkTexture();
+        if (tex != null)
+            return CreateBillboard("MemeShark", scale, 0.66f, tex, new Color(0.55f, 0.65f, 0.78f));
+
         var root = new GameObject("MemeShark");
         root.transform.localScale = Vector3.one * scale;
 
@@ -674,6 +695,10 @@ public static class MemeVisuals
 
     public static GameObject CreateCatOrb(float scale)
     {
+        var tex = LoadCatPoseTexture();
+        if (tex != null)
+            return CreateBillboard("MemeCat", scale, 0.82f, tex, new Color(0.92f, 0.78f, 0.55f));
+
         EnsureSphere();
         var go = Body("MemeCat", scale, BuildCatTexture(), new Color(0.92f, 0.78f, 0.55f));
         return go;
@@ -698,6 +723,17 @@ public static class MemeVisuals
         return dogeTex;
     }
 
+    static Texture2D LoadCatPoseTexture()
+    {
+        if (catPoseTex != null)
+            return catPoseTex;
+        var src = Resources.Load<Texture2D>("Meme/giant_cat");
+        if (src == null)
+            return null;
+        catPoseTex = PrepareCoinTexture(src);
+        return catPoseTex;
+    }
+
     static Texture2D BuildCatTexture()
     {
         if (catTex != null)
@@ -715,6 +751,28 @@ public static class MemeVisuals
         catTex.SetPixels(px);
         catTex.Apply(false, true);
         return catTex;
+    }
+
+    static Texture2D LoadPepePoseTexture()
+    {
+        if (pepePoseTex != null)
+            return pepePoseTex;
+        var src = Resources.Load<Texture2D>("Meme/pepe_punch");
+        if (src == null)
+            return null;
+        pepePoseTex = PrepareCoinTexture(src);
+        return pepePoseTex;
+    }
+
+    static Texture2D LoadSneakerSharkTexture()
+    {
+        if (sneakerSharkTex != null)
+            return sneakerSharkTex;
+        var src = Resources.Load<Texture2D>("Meme/sneaker_shark");
+        if (src == null)
+            return null;
+        sneakerSharkTex = PrepareCoinTexture(src);
+        return sneakerSharkTex;
     }
 
     static Texture2D BuildPepeTexture()

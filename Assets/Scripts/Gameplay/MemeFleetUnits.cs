@@ -139,50 +139,72 @@ public abstract class MemeUnitBase : MonoBehaviour
 
 public class MemePepeUnit : MemeUnitBase
 {
-    enum Phase { Orbit, Lunge, Return }
+    enum Phase { Orbit, Approach, Flurry, Return }
+
     Phase phase = Phase.Orbit;
     float moveT;
-    Vector3 lungeFrom;
-    Vector3 lungeTo;
+    Vector3 moveFrom;
+    Vector3 moveTo;
+    Vector3 baseScale;
 
-    protected override float FirstAttackDelay() => 0.9f;
-    protected override float AttackInterval() => 2.2f;
-    protected override int MaxAttacks() => 3;
+    int flurryHit;
+    const int FlurryHits = 14;
+    const float FlurryInterval = 0.062f;
+    float flurryTimer;
+    Vector3 punchAnchor;
+    float sideSign = 1f;
+
+    protected override float FirstAttackDelay() => 0.5f;
+    protected override float AttackInterval() => 0.35f;
+    protected override int MaxAttacks() => 2;
 
     protected override void OnSpawned()
     {
-        transform.position = OrbitPoint(1.62f, 0.15f);
+        baseScale = transform.localScale;
+        transform.position = OrbitPoint(1.55f, 0.12f);
         FaceTangent(AimDirWorld());
     }
 
     protected override void TickOrbit(float dt)
     {
-        if (phase == Phase.Orbit)
+        switch (phase)
         {
-            transform.position = OrbitPoint(1.62f, 0.15f);
-            FaceTangent(AimDirWorld());
-            return;
-        }
+            case Phase.Orbit:
+                transform.position = OrbitPoint(1.55f, 0.12f);
+                transform.localScale = baseScale;
+                FaceTangent(AimDirWorld());
+                break;
 
-        moveT += dt * (phase == Phase.Lunge ? 7f : 3.5f);
-        float u = Mathf.Clamp01(moveT);
-        if (phase == Phase.Lunge)
-        {
-            transform.position = Vector3.Lerp(lungeFrom, lungeTo, u * u);
-            if (u >= 1f)
-            {
-                PunchImpact();
-                phase = Phase.Return;
-                moveT = 0f;
-                lungeFrom = transform.position;
-                lungeTo = OrbitPoint(1.62f, 0.15f);
-            }
-        }
-        else
-        {
-            transform.position = Vector3.Lerp(lungeFrom, lungeTo, u);
-            if (u >= 1f)
-                phase = Phase.Orbit;
+            case Phase.Approach:
+                moveT += dt * 9f;
+                {
+                    float u = Mathf.Clamp01(moveT);
+                    transform.position = Vector3.Lerp(moveFrom, moveTo, u * u);
+                    transform.localScale = baseScale * (1f + 0.06f * u);
+                    FaceTangent(AimDirWorld());
+                    if (u >= 1f)
+                        BeginFlurry();
+                }
+                break;
+
+            case Phase.Flurry:
+                TickFlurry(dt);
+                break;
+
+            case Phase.Return:
+                moveT += dt * 4.5f;
+                {
+                    float u = Mathf.Clamp01(moveT);
+                    transform.position = Vector3.Lerp(moveFrom, moveTo, u);
+                    transform.localScale = baseScale * (1f - 0.08f * u);
+                    if (u >= 1f)
+                    {
+                        phase = Phase.Orbit;
+                        if (attackCount < MaxAttacks())
+                            nextAttack = age + AttackInterval();
+                    }
+                }
+                break;
         }
     }
 
@@ -192,24 +214,106 @@ public class MemePepeUnit : MemeUnitBase
             return;
 
         float R = earth.Radius;
-        Vector3 hit = SurfacePoint();
-        Vector3 n = AimDirWorld();
-        lungeFrom = OrbitPoint(1.62f, 0.15f);
-        lungeTo = hit + n * (R * 0.06f);
-        phase = Phase.Lunge;
+        moveFrom = transform.position;
+        moveTo = SurfacePoint() + AimDirWorld() * (R * 0.065f);
+        phase = Phase.Approach;
         moveT = 0f;
+        nextAttack = age + 999f;
     }
 
-    void PunchImpact()
+    void BeginFlurry()
+    {
+        phase = Phase.Flurry;
+        flurryHit = 0;
+        flurryTimer = 0f;
+        punchAnchor = moveTo;
+        sideSign = 1f;
+    }
+
+    void TickFlurry(float dt)
+    {
+        flurryTimer += dt;
+        float R = earth.Radius;
+        Vector3 n = AimDirWorld();
+        Vector3 tangent = PunchTangent(n);
+        float jab = Mathf.Sin(flurryTimer * 52f);
+
+        transform.position = punchAnchor
+            + tangent * (Mathf.Sin(flurryHit * 1.7f) * R * 0.012f)
+            + n * (R * 0.014f * jab);
+        transform.localScale = baseScale * (1f + 0.1f * Mathf.Abs(jab));
+        FaceTangent(n);
+        transform.Rotate(n, sideSign * 7f, Space.World);
+
+        while (flurryTimer >= FlurryInterval && flurryHit < FlurryHits)
+        {
+            flurryTimer -= FlurryInterval;
+            DoFlurryPunch();
+            flurryHit++;
+            sideSign *= -1f;
+        }
+
+        if (flurryHit >= FlurryHits)
+            EndFlurry();
+    }
+
+    void DoFlurryPunch()
+    {
+        float R = earth.Radius;
+        Vector3 n = AimDirWorld();
+        Vector3 hit = SurfacePoint();
+        float progress = flurryHit / (float)Mathf.Max(1, FlurryHits - 1);
+
+        var deform = EarthCraterDeform.Ensure(earth);
+        if (deform != null)
+        {
+            float rad = Mathf.Lerp(0.06f, 0.24f, progress);
+            float depth = Mathf.Lerp(0.04f, 0.26f, progress);
+            float floor = Mathf.Lerp(0.34f, 0.19f, progress);
+            deform.DrillBore(hit, rad, depth, floor);
+        }
+
+        EarthSurfaceScorch.Ensure(earth)?.BurnAt(hit, 0.02f + progress * 0.035f, 0.55f + progress * 0.2f);
+
+        MemeAttackSystem.SpawnFlash(
+            hit,
+            n,
+            R * (0.022f + progress * 0.018f),
+            new Color(0.45f, 1f, 0.38f, 0.38f + 0.1f * (flurryHit % 3)));
+        CameraShake.Shake(0.045f + (flurryHit % 4) * 0.012f, 0.035f + progress * 0.03f);
+
+        if (flurryHit % 6 == 5)
+        {
+            MemeCaption.Spawn(
+                hit + n * (R * 0.13f),
+                "bonk",
+                new Color(0.4f, 1f, 0.35f),
+                R * 0.085f);
+        }
+    }
+
+    void EndFlurry()
     {
         Vector3 hit = SurfacePoint();
         Vector3 n = AimDirWorld();
-        MemeAttackSystem.LightHit(earth, hit, n, 0.06f, 0.028f, 0.03f, 0.52f);
-        CameraShake.Shake(0.18f, 0.16f);
-        if (attackCount % 2 == 0)
-            MemeCaption.Spawn(hit + n * (earth.Radius * 0.18f), "bonk", new Color(0.4f, 1f, 0.35f), earth.Radius * 0.12f);
-        MemeAttackSystem.ApplyCasualtiesStatic(0.001f);
+        EarthCraterDeform.Ensure(earth)?.DrillBore(hit, 0.26f, 0.28f, 0.18f);
+        CameraShake.Shake(0.28f, 0.2f);
+        MemeCaption.Spawn(hit + n * (earth.Radius * 0.16f), "feels good man", new Color(0.55f, 1f, 0.45f), earth.Radius * 0.11f);
+        MemeAttackSystem.ApplyCasualtiesStatic(0.0011f);
         RegisterAttack();
+
+        moveFrom = transform.position;
+        moveTo = OrbitPoint(1.55f, 0.12f);
+        phase = Phase.Return;
+        moveT = 0f;
+    }
+
+    static Vector3 PunchTangent(Vector3 normal)
+    {
+        Vector3 tangent = Vector3.Cross(normal, Vector3.up);
+        if (tangent.sqrMagnitude < 1e-4f)
+            tangent = Vector3.Cross(normal, Vector3.right);
+        return tangent.normalized;
     }
 }
 
@@ -247,7 +351,7 @@ public class MemeCatUnit : MemeUnitBase
     protected override void OnUnitSpawned() => ActiveCount++;
     protected override void OnUnitDestroyed() => ActiveCount = Mathf.Max(0, ActiveCount - 1);
 
-    float BodyRadius() => transform.localScale.x * 0.5f;
+    float BodyRadius() => transform.localScale.y * 0.52f;
 
     void PlaceOnTarget(float liftMul)
     {
@@ -309,45 +413,100 @@ public class MemeCatUnit : MemeUnitBase
 public class MemeSharkUnit : MemeUnitBase
 {
     Vector3 runAxis;
-    float runSpeed = 38f;
+    float runSpeed = 58f;
+    float stompTimer;
+    const float StompInterval = 0.17f;
+    float bobPhase;
+    float sideSign = 1f;
+    Vector3 baseScale;
 
-    protected override float FirstAttackDelay() => 1f;
-    protected override float AttackInterval() => 2.2f;
-    protected override int MaxAttacks() => 4;
+    protected override float FirstAttackDelay() => 0.15f;
+    protected override float AttackInterval() => 999f;
+    protected override int MaxAttacks() => 18;
 
     protected override void OnSpawned()
     {
-        transform.position = OrbitPoint(1.38f, 0.35f);
-        runAxis = Vector3.Cross(AimDirWorld(), Vector3.up);
+        baseScale = transform.localScale;
+        Vector3 n = AimDirWorld();
+        transform.position = OrbitPoint(1.055f, 0f);
+        runAxis = Vector3.Cross(n, Vector3.up);
         if (runAxis.sqrMagnitude < 1e-4f)
-            runAxis = Vector3.right;
+            runAxis = Vector3.Cross(n, Vector3.right);
         runAxis.Normalize();
-        FaceTangent(AimDirWorld());
+        stompTimer = 0.05f;
+        nextAttack = age + 999f;
     }
 
     protected override void TickOrbit(float dt)
     {
-        transform.RotateAround(earth.transform.position, runAxis, runSpeed * dt);
-        Vector3 vel = Vector3.Cross(runAxis, transform.position - earth.transform.position);
-        if (vel.sqrMagnitude > 1e-4f)
-            transform.rotation = Quaternion.LookRotation(vel.normalized, AimDirWorld());
+        if (attackCount >= MaxAttacks())
+            return;
+
+        float R = earth.Radius;
+        Vector3 center = earth.transform.position;
+
+        transform.RotateAround(center, runAxis, runSpeed * dt);
+
+        Vector3 radial = (transform.position - center).normalized;
+        bobPhase += dt * 16f;
+        float step = Mathf.Abs(Mathf.Sin(bobPhase));
+        transform.position = center + radial * (R * (1.048f + 0.022f * step));
+        transform.localScale = baseScale * (1f + 0.07f * step);
+
+        stompTimer -= dt;
+        if (stompTimer <= 0f)
+        {
+            stompTimer = StompInterval;
+            Stomp(radial);
+        }
     }
 
-    protected override void DoAttack()
+    void Stomp(Vector3 radial)
     {
-        Vector3 hit = SurfacePoint();
-        Vector3 n = AimDirWorld();
-        MemeAttackSystem.LightHit(earth, hit, n, 0.055f, 0.025f, 0.028f, 0.48f);
+        if (attackCount >= MaxAttacks())
+            return;
 
-        if (attackCount % 3 == 0)
-            EarthSurfaceScorch.Ensure(earth)?.PaintSneakerPrint(hit, 0.05f);
+        float R = earth.Radius;
+        Vector3 center = earth.transform.position;
+        Vector3 n = radial;
+        Vector3 hit = center + n * R;
 
-        CameraShake.Shake(0.14f, 0.12f);
+        Vector3 tangent = Vector3.Cross(n, runAxis);
+        if (tangent.sqrMagnitude < 1e-4f)
+            tangent = Vector3.Cross(n, Vector3.up);
+        tangent.Normalize();
+        hit += tangent * (sideSign * R * 0.038f);
+        sideSign *= -1f;
+
+        float power = 0.62f + (attackCount % 4) * 0.12f;
+        NuclearBlast.Play(earth, hit, n, power);
+        MemeAttackSystem.SpawnFlash(hit, n, R * 0.06f, new Color(1f, 0.5f, 0.15f, 0.62f));
+        ImpactShockwave.Spawn(hit, n, R * (0.32f + (attackCount % 3) * 0.08f));
+        EarthSurfaceScorch.Ensure(earth)?.PaintSneakerPrint(hit, 0.05f);
+
         if (attackCount % 2 == 0)
-            MemeCaption.Spawn(hit + n * (earth.Radius * 0.14f), "SPLAT", new Color(0.25f, 0.65f, 1f), earth.Radius * 0.1f);
-        MemeAttackSystem.ApplyCasualtiesStatic(0.0008f);
+            MemeAttackSystem.LightHit(earth, hit, n, 0.042f, 0.018f, 0.03f, 0.5f);
+
+        CameraShake.Shake(0.11f + (attackCount % 5) * 0.025f, 0.09f);
+
+        if (attackCount % 4 == 0)
+        {
+            MemeCaption.Spawn(
+                hit + n * (R * 0.15f),
+                attackCount >= 12 ? "BOOM!" : "STOMP!",
+                new Color(0.25f, 0.65f, 1f),
+                R * 0.11f);
+        }
+        else if (attackCount % 2 == 1)
+        {
+            MemeCaption.Spawn(hit + n * (R * 0.12f), "SPLAT", new Color(0.35f, 0.75f, 1f), R * 0.085f);
+        }
+
+        MemeAttackSystem.ApplyCasualtiesStatic(0.0006f);
         RegisterAttack();
     }
+
+    protected override void DoAttack() { }
 }
 
 public class MemeCowUnit : MemeUnitBase

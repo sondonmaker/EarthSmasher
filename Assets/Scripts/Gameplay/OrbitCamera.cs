@@ -169,6 +169,44 @@ public class OrbitCamera : MonoBehaviour
         _dragging = false;
     }
 
+    /// <summary>밈 빌보드(트럼프 등)가 지구와 함께 잘 보이도록 해당 면을 바라보며 줌아웃.</summary>
+    public void FrameMemeBillboard(Vector3 surfaceNormalWorld, float heightAboveSurfaceMul, float duration = 0.95f)
+    {
+        if (target == null)
+            return;
+
+        Vector3 n = surfaceNormalWorld.normalized;
+        if (n.sqrMagnitude < 1e-6f)
+            return;
+
+        float planetR = 2.5f;
+        var earth = target.GetComponent<EarthPlanet>();
+        if (earth != null)
+            planetR = earth.Radius;
+
+        Vector3 toCam = n;
+        _focusYaw = Mathf.Atan2(toCam.x, toCam.z) * Mathf.Rad2Deg;
+        _focusPitch = Mathf.Asin(Mathf.Clamp(toCam.y, -1f, 1f)) * Mathf.Rad2Deg;
+        _focusPitch = Mathf.Clamp(_focusPitch, minPitch, maxPitch);
+
+        float fov = Camera.main != null ? Camera.main.fieldOfView : 50f;
+        float half = Mathf.Tan(0.5f * fov * Mathf.Deg2Rad);
+        // 지구 기본 구도에서 살짝만 멀리 + 빌보드 높이만큼 여유
+        float baseDist = (planetR / Mathf.Max(0.05f, half)) / 0.56f;
+        float billExtra = planetR * heightAboveSurfaceMul * 0.16f;
+        _focusDistance = Mathf.Clamp(baseDist + billExtra, minDistance, maxDistance);
+
+        _fromYaw = yaw;
+        _fromPitch = pitch;
+        _fromDistance = distance;
+        _focusYaw = _fromYaw + Mathf.DeltaAngle(_fromYaw, _focusYaw);
+        _focusDuration = Mathf.Max(0.05f, duration);
+        _focusT = 0f;
+        _focusing = true;
+        _chasing = false;
+        _dragging = false;
+    }
+
     /// <summary>시작 시 지구를 크게, 줌아웃하면 은하가 보이게 범위 설정.</summary>
     public void FramePlanet(float radius, float fill = 0.82f)
     {
