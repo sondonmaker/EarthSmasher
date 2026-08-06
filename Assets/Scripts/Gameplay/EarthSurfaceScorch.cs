@@ -620,4 +620,110 @@ public class EarthSurfaceScorch : MonoBehaviour
             }
         }
     }
+
+    /// <summary>고양이 발톱 자국 — 평행 긁힌 선.</summary>
+    public void PaintScratchMarks(Vector3 worldPoint, Vector3 worldNormal, int slashes, float lengthNorm, int seed = 0, int maxSteps = 0)
+    {
+        EnsureWorkingTexture();
+        if (working == null || pixels == null)
+            return;
+        if (!TryImpactUv(worldPoint, out int cx, out int cy, out _, out _))
+            return;
+
+        int w = working.width;
+        int h = working.height;
+        float aspect = h / (float)w;
+        slashes = Mathf.Clamp(slashes, 2, 6);
+        float lenPx = Mathf.Clamp(lengthNorm * w * 0.55f, 18f, w * 0.18f);
+        if (seed == 0)
+            seed = cx * 131 + cy * 17;
+
+        var rng = new System.Random(seed);
+        float baseAngle = Mathf.Lerp(-0.55f, -0.15f, (float)rng.NextDouble());
+        Color32 scrape = new Color32(48, 38, 32, 255);
+        Color32 bright = new Color32(210, 195, 175, 255);
+
+        for (int i = 0; i < slashes; i++)
+        {
+            float ang = baseAngle + i * (0.9f / Mathf.Max(1, slashes - 1));
+            float x = cx;
+            float y = cy;
+            int steps = maxSteps > 0 ? maxSteps : Mathf.Max(12, Mathf.RoundToInt(lenPx));
+            for (int s = 0; s < steps; s++)
+            {
+                float t = s / (float)steps;
+                x += Mathf.Cos(ang) * (lenPx / steps);
+                y += Mathf.Sin(ang) * (lenPx / steps) * aspect;
+                int ix = Mathf.RoundToInt(x);
+                int iy = Mathf.RoundToInt(y);
+                if (iy < 0 || iy >= h)
+                    break;
+                while (ix < 0) ix += w;
+                while (ix >= w) ix -= w;
+                float tip = 1f - t * 0.7f;
+                StampCrack(ix, iy, tip > 0.6f ? 2 : 1, scrape, 0.55f * tip + 0.2f);
+                if (s % 3 == 0)
+                    StampCrack(ix, iy, 0, bright, 0.18f * tip);
+            }
+        }
+
+        dirty = true;
+    }
+
+    /// <summary>신발 박힌 자국 — 타원형 청/흰색.</summary>
+    public void PaintSneakerPrint(Vector3 worldPoint, float radiusNorm, int seed = 0)
+    {
+        EnsureWorkingTexture();
+        if (working == null || pixels == null)
+            return;
+        if (!TryImpactUv(worldPoint, out int cx, out int cy, out _, out _))
+            return;
+
+        int w = working.width;
+        int h = working.height;
+        float aspect = h / (float)w;
+        float rx = Mathf.Clamp(radiusNorm * w * 0.35f, 10f, w * 0.08f);
+        float ry = rx * 1.55f;
+        if (seed == 0)
+            seed = cx ^ cy;
+
+        var rng = new System.Random(seed);
+        float rot = (float)(rng.NextDouble() * Mathf.PI * 2.0);
+        Color32 sole = new Color32(38, 92, 168, 255);
+        Color32 tread = new Color32(220, 228, 240, 255);
+
+        for (int dy = -Mathf.CeilToInt(ry) - 1; dy <= Mathf.CeilToInt(ry) + 1; dy++)
+        {
+            int y = cy + dy;
+            if (y < 0 || y >= h)
+                continue;
+            for (int dx = -Mathf.CeilToInt(rx) - 1; dx <= Mathf.CeilToInt(rx) + 1; dx++)
+            {
+                int x = cx + dx;
+                while (x < 0) x += w;
+                while (x >= w) x -= w;
+
+                float lx = dx;
+                float ly = dy / aspect;
+                float c = Mathf.Cos(rot);
+                float s = Mathf.Sin(rot);
+                float ex = lx * c - ly * s;
+                float ey = lx * s + ly * c;
+                float d = (ex * ex) / (rx * rx) + (ey * ey) / (ry * ry);
+                if (d > 1.05f)
+                    continue;
+
+                float mask = Mathf.Clamp01(1f - d);
+                int idx = y * w + x;
+                Color32 p = pixels[idx];
+                Color32 col = Mathf.Abs(ex) < rx * 0.15f ? tread : sole;
+                p.r = (byte)Mathf.RoundToInt(Mathf.Lerp(p.r, col.r, mask * 0.72f));
+                p.g = (byte)Mathf.RoundToInt(Mathf.Lerp(p.g, col.g, mask * 0.72f));
+                p.b = (byte)Mathf.RoundToInt(Mathf.Lerp(p.b, col.b, mask * 0.72f));
+                pixels[idx] = p;
+            }
+        }
+
+        dirty = true;
+    }
 }

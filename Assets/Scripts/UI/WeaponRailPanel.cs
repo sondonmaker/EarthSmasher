@@ -170,11 +170,18 @@ public class WeaponRailPanel : MonoBehaviour
             new Cat
             {
                 id = "meme",
-                icon = "^",
+                icon = "M",
                 tip = "Meme",
                 subs = new[]
                 {
-                    SubOf("cat", "=", "Giant Cat", null, true)
+                    SubOf("doge", "D", "Doge Strike", MemeBusy),
+                    SubOf("to_the_moon", "T", "To The Moon", MoonRunBusy),
+                    SubOf("pengu_coin", "G", "Pengu Coin", PenguBusy),
+                    SubOf("trump_tariff", "R", "Trump Tariff", TrumpBusy),
+                    SubOf("pepe", "P", "Pepe Punch"),
+                    SubOf("cat", "=", "Giant Cat"),
+                    SubOf("shark", "S", "Sneaker Shark"),
+                    SubOf("earth_cow", "C", "Earth Cow")
                 }
             }
         };
@@ -312,11 +319,33 @@ public class WeaponRailPanel : MonoBehaviour
             var subs = cats[selectedCat].subs;
             float subX = catX - SubGap - SubW;
             hitL = Mathf.Min(hitL, subX);
+
+            float catY = Top + selectedCat * (CatSize + CatGap);
+            float subH = SubH;
+            float subGap = SubGap;
+            float panelH = subs.Length * (subH + subGap) - subGap;
+            float availH = MobileUi.Height - Top - Pad * 2f;
+            if (panelH > availH && subs.Length > 0)
+            {
+                subGap = 3f;
+                subH = Mathf.Max(42f, (availH + subGap) / subs.Length - subGap);
+                panelH = subs.Length * (subH + subGap) - subGap;
+            }
+
+            // 선택한 카테고리 버튼 위쪽으로 펼쳐서 하단(캣/샤크/카우)이 잘리지 않게
+            float subBaseY = catY + CatSize - panelH;
+            if (subBaseY < Top)
+                subBaseY = Top;
+            float maxBaseY = MobileUi.Height - Pad - panelH;
+            if (subBaseY > maxBaseY)
+                subBaseY = Mathf.Max(Top, maxBaseY);
+
             for (int i = 0; i < subs.Length; i++)
             {
-                float y = Top + i * (SubH + SubGap);
-                hitB = Mathf.Max(hitB, y + SubH);
-                Rect r = new Rect(subX, y, SubW, SubH);
+                float y = subBaseY + i * (subH + subGap);
+                hitB = Mathf.Max(hitB, y + subH);
+                hitT = Mathf.Min(hitT, y);
+                Rect r = new Rect(subX, y, SubW, subH);
                 bool on = selectedSub == i || armedId == subs[i].id;
                 bool busy = subs[i].busy != null && subs[i].busy();
                 bool locked = subs[i].locked;
@@ -453,6 +482,32 @@ public class WeaponRailPanel : MonoBehaviour
                 break;
             case "von_neumann":
                 SpacecraftFleetSystem.Ensure().TrySummonAt(SpacecraftKind.VonNeumannProbe, point);
+                break;
+            case "doge":
+            case "to_the_moon":
+            case "pengu_coin":
+            case "trump_tariff":
+            case "pepe":
+            case "cat":
+            case "shark":
+            case "earth_cow":
+                if (!MemeAttackSystem.Ensure().TryFire(id, point, normal))
+                {
+                    if (id == "cat" && MemeCatUnit.ActiveCount >= 1)
+                        toast = "Giant Cat already scratching";
+                    else if (id == "to_the_moon" && MemeAttackSystem.Instance != null && MemeAttackSystem.Instance.IsMoonRunBusy)
+                        toast = "To The Moon already running";
+                    else if (id == "pengu_coin" && MemeAttackSystem.Instance != null && MemeAttackSystem.Instance.IsPenguRunning)
+                        toast = "Pengu Coin already running";
+                    else if (id == "trump_tariff" && MemeAttackSystem.Instance != null && MemeAttackSystem.Instance.IsTrumpRunning)
+                        toast = "Trump Tariff already running";
+                    else if (id == "doge" && MemeAttackSystem.Instance != null && MemeAttackSystem.Instance.IsDogeRunning)
+                        toast = "Doge Strike already running";
+                    else if (MemeUnitBase.LiveCount >= 4)
+                        toast = "Too many meme units — wait for one to finish";
+                    else
+                        toast = "Cannot fire meme weapon";
+                }
                 break;
             case "quake":
             {
@@ -632,5 +687,29 @@ public class WeaponRailPanel : MonoBehaviour
     {
         var q = EarthquakeSystem.Instance;
         return q != null && q.IsRunning;
+    }
+
+    static bool MemeBusy()
+    {
+        var m = MemeAttackSystem.Instance;
+        return m != null && m.IsDogeRunning;
+    }
+
+    static bool MoonRunBusy()
+    {
+        var m = MemeAttackSystem.Instance;
+        return m != null && m.IsMoonRunBusy;
+    }
+
+    static bool PenguBusy()
+    {
+        var m = MemeAttackSystem.Instance;
+        return m != null && m.IsPenguRunning;
+    }
+
+    static bool TrumpBusy()
+    {
+        var m = MemeAttackSystem.Instance;
+        return m != null && m.IsTrumpRunning;
     }
 }

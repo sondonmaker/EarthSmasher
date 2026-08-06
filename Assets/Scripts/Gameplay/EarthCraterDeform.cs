@@ -123,6 +123,70 @@ public class EarthCraterDeform : MonoBehaviour
         Dig(worldPoint, radiusNorm, depthNorm, false, seed);
     }
 
+    /// <summary>고양이 할퀴기 — 표면을 따라 긴 홈을 여러 줄 파낸다.</summary>
+    public void ScratchGrooves(Vector3 worldPoint, Vector3 worldNormal, int slashes, float lengthNorm, float depthNorm, int seed = 0, int maxStepsPerSlash = 0)
+    {
+        EnsureReady();
+        if (workingCrust == null || !UvLockIntact(workingCrust))
+            return;
+
+        Vector3 local = transform.InverseTransformPoint(worldPoint);
+        if (local.sqrMagnitude < 1e-8f)
+            return;
+
+        Vector3 center = local.normalized;
+        Vector3 tangent = Vector3.Cross(center, Vector3.up);
+        if (tangent.sqrMagnitude < 1e-4f)
+            tangent = Vector3.Cross(center, Vector3.right);
+        tangent.Normalize();
+        Vector3 bitangent = Vector3.Cross(center, tangent).normalized;
+
+        if (seed == 0)
+            seed = HashDir(center) ^ 0xCA7;
+
+        slashes = Mathf.Clamp(slashes, 2, 6);
+        float spread = Mathf.Clamp(lengthNorm, 0.06f, 0.22f);
+        float depth = Mathf.Clamp(depthNorm, 0.015f, 0.06f);
+        float grooveW = Mathf.Clamp(spread * 0.18f, 0.012f, 0.035f);
+        int steps = maxStepsPerSlash > 0
+            ? maxStepsPerSlash
+            : Mathf.Max(8, Mathf.RoundToInt(spread * 120f));
+
+        var rng = new System.Random(seed);
+        float baseAngle = Mathf.Lerp(-28f, -8f, (float)rng.NextDouble());
+
+        for (int i = 0; i < slashes; i++)
+        {
+            float ang = baseAngle + i * (56f / Mathf.Max(1, slashes - 1));
+            Vector3 slashAxis = (Quaternion.AngleAxis(ang, bitangent) * tangent).normalized;
+            Vector3 grooveEnd = (center + slashAxis * spread * 1.15f).normalized;
+
+            for (int s = 0; s < steps; s++)
+            {
+                float t = s / (float)(steps - 1);
+                Vector3 dir = Vector3.Slerp(center, grooveEnd, t).normalized;
+                float falloff = 1f - t * 0.35f;
+                DeformVerticesOnly(
+                    workingCrust,
+                    dir,
+                    grooveW * (0.85f + 0.15f * (1f - t)),
+                    depth * falloff,
+                    0f,
+                    seed + i * 131 + s * 17,
+                    minShellRadius);
+            }
+        }
+
+        if (!UvLockIntact(workingCrust))
+        {
+            ready = false;
+            workingCrust = null;
+            return;
+        }
+
+        RefreshCollider();
+    }
+
     public int Dig(Vector3 worldPoint, float radiusNorm, float depthNorm, bool huge, int seed = 0)
     {
         EnsureReady();

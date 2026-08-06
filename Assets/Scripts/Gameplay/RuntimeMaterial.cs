@@ -25,6 +25,18 @@ public static class RuntimeMaterial
         return mat;
     }
 
+    /// <summary>PNG 알파가 보이도록 — Unlit/Texture 는 알파 무시해서 체커보드가 회색 원으로 보임.</summary>
+    public static Material TexturedTransparent(Texture2D tex)
+    {
+        var mat = new Material(EarthTextureLoader.SafeShader("Sprites/Default", "Unlit/Transparent"));
+        mat.mainTexture = tex;
+        if (mat.HasProperty("_MainTex"))
+            mat.SetTexture("_MainTex", tex);
+        mat.color = Color.white;
+        mat.renderQueue = 3000;
+        return mat;
+    }
+
     static Shader PickShader(bool preferTransparent)
     {
         return EarthTextureLoader.SafeShader(

@@ -288,13 +288,20 @@ public class EarthControlPanel : MonoBehaviour
 
     void DrawDisaster()
     {
-        GUILayout.Label("Weapons moved to the right icon rail.\n(Impact / War / Quake / Moon / Meme)", _hint);
+        GUILayout.Label("Weapons moved to the right icon rail.\n(Impact / Missile / War / Fleet / Laser / Meme)", _hint);
         GUILayout.Space(8);
+        if (GUILayout.Button("Open Meme Weapons", GUILayout.Height(36)))
+        {
+            var rail = FindObjectOfType<WeaponRailPanel>();
+            if (rail != null)
+                rail.OpenCategory(5);
+            expanded = false;
+        }
         if (GUILayout.Button("Open Weapon Rail", GUILayout.Height(36)))
         {
             var rail = FindObjectOfType<WeaponRailPanel>();
             if (rail != null)
-                rail.OpenCategory(1);
+                rail.OpenCategory(0);
             expanded = false;
         }
         GUILayout.Space(12);

@@ -107,7 +107,7 @@ public class MoonImpactSystem : MonoBehaviour
             if (orbitCam != null && moonGo != null && earth != null)
                 orbitCam.BeginChase(moonGo.transform, earth.transform, R * 2.4f, 0.32f);
 
-            yield return RunCrash(moonGo, center, worldDir, R, report);
+            yield return RunCrash(moonGo, localDir, R, report);
 
             if (orbitCam != null)
                 orbitCam.EndChase(true);
@@ -189,13 +189,8 @@ public class MoonImpactSystem : MonoBehaviour
         yield return WaitSim(0.25f);
     }
 
-    IEnumerator RunCrash(GameObject moon, Vector3 center, Vector3 approachDir, float R, MoonImpactReport report)
+    IEnumerator RunCrash(GameObject moon, Vector3 localDir, float R, MoonImpactReport report)
     {
-        Vector3 impact = center + approachDir * R;
-        // 멀리서 시작해 프레임에 달이 먼저 보이게
-        Vector3 start = center + approachDir * (R * 8.5f);
-        moon.transform.position = start;
-
         float t = 0f;
         while (t < 1f)
         {
@@ -203,12 +198,18 @@ public class MoonImpactSystem : MonoBehaviour
             t += Time.unscaledDeltaTime * Sim() * speed;
             float u = Mathf.Clamp01(t);
             u = u * u;
+            Vector3 center = earth.transform.position;
+            Vector3 n = DirectionWorld(localDir);
+            Vector3 start = center + n * (R * 8.5f);
+            Vector3 impact = center + n * R;
             moon.transform.position = Vector3.Lerp(start, impact, u);
             moon.transform.Rotate(Vector3.right, 120f * Time.deltaTime * Sim(), Space.Self);
             yield return null;
         }
 
-        moon.transform.position = impact;
+        Vector3 hit = earth.transform.position + DirectionWorld(localDir) * R;
+        Vector3 approachDir = DirectionWorld(localDir);
+        moon.transform.position = hit;
         // 달은 충돌과 함께 소멸 — 추적 해제 후 파편 없이 제거
         var orbitCam = Object.FindObjectOfType<OrbitCamera>();
         if (orbitCam != null)
@@ -216,17 +217,17 @@ public class MoonImpactSystem : MonoBehaviour
         DestroyMoon();
 
         CameraShake.Shake(2.8f, 1.45f);
-        CinematicExplosion.Play(impact, approachDir, 2.6f);
-        SpawnFlashBurst(impact, approachDir, R * 1.4f, 1.35f);
-        SpawnDustCloud(impact, approachDir, R * 0.18f, 22);
-        SpawnDustVeil(center, R * 1.08f);
+        CinematicExplosion.Play(hit, approachDir, 2.6f);
+        SpawnFlashBurst(hit, approachDir, R * 1.4f, 1.35f);
+        SpawnDustCloud(hit, approachDir, R * 0.18f, 22);
+        SpawnDustVeil(earth.transform.position, R * 1.08f);
 
         // 움푹 + 맞은 면 용암 원형
         float craterR = 0.22f;
-        ImpactCrater.SpawnHuge(earth, impact, craterR, 0.09f);
+        ImpactCrater.SpawnHuge(earth, hit, craterR, 0.09f);
 
         // 쉐이크와 함께 용암 균열이 바깥으로 갈라짐 (텍스처 + 발광 리본)
-        yield return MoltenCrackFx.Play(earth, impact, craterR);
+        yield return MoltenCrackFx.Play(earth, hit, craterR);
 
         yield return WaitSim(0.45f);
         CameraShake.Shake(0.8f, 0.4f);
@@ -373,6 +374,9 @@ public class MoonImpactSystem : MonoBehaviour
         float u = 1f - t;
         return u * u * a + 2f * u * t * b + t * t * c;
     }
+
+    Vector3 DirectionWorld(Vector3 localDir) =>
+        earth.transform.TransformDirection(localDir).normalized;
 
     float Sim()
     {
