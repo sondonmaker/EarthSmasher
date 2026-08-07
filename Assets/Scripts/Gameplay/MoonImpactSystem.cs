@@ -66,6 +66,17 @@ public class MoonImpactSystem : MonoBehaviour
         return true;
     }
 
+    public void Abort()
+    {
+        StopAllCoroutines();
+        IsRunning = false;
+        var orbitCam = Object.FindObjectOfType<OrbitCamera>();
+        if (orbitCam != null)
+            orbitCam.EndChase(true);
+        DestroyMoon();
+        CleanupLeftoverFx();
+    }
+
     IEnumerator Run(MoonImpactMode mode, Vector3? worldTarget)
     {
         IsRunning = true;
@@ -241,17 +252,25 @@ public class MoonImpactSystem : MonoBehaviour
             ? PopulationSystem.Instance.Population
             : PopulationSystem.BaselinePopulation;
 
-        // float 범위 오차 피하려고 인구 비율로 계산
-        // Crash: 달 직격 ≈ 거의 전멸 / Orbit: 조석·쓰나미로 대규모 피해
-        double killFrac = crash
-            ? Random.Range(0.92f, 0.995f)
-            : Random.Range(0.12f, 0.28f);
-        long deaths = (long)System.Math.Floor(popNow * killFrac);
+        float radiusDeg = crash ? 48f : 16f;
+        float lethality = crash ? 0.92f : 0.5f;
+        float yield = crash ? 1.35f : 1f;
+        long deaths = PopulationCasualtySystem.EstimateDeaths(lat, lon, radiusDeg, lethality, yield);
+
+        // 달 직격은 전 지구적 재난 — 인구 밀집 지역이면 더 크게, 대양 중심이면 연안 피해 위주
+        if (crash)
+        {
+            long globalFloor = (long)System.Math.Floor(popNow * Random.Range(0.35f, 0.72f));
+            deaths = System.Math.Max(deaths, globalFloor);
+        }
+
         deaths = System.Math.Max(0, System.Math.Min(deaths, popNow));
         long survivors = popNow - deaths;
         long injuries = crash
             ? (long)System.Math.Min(survivors, System.Math.Floor(survivors * Random.Range(0.6f, 0.95f)))
             : (long)System.Math.Floor(deaths * Random.Range(1.8f, 3.2f));
+
+        double killFrac = popNow > 0 ? deaths / (double)popNow : 0.0;
 
         var report = new MoonImpactReport
         {

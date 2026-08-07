@@ -145,6 +145,16 @@ public class MiningDrillRig : MonoBehaviour
 
         EarthSurfaceScorch.Ensure(earth)?.BurnAt(point, rad * 0.85f, 0.7f);
 
+        if (digCount % 4 == 0)
+        {
+            PopulationCasualtySystem.ApplyAt(
+                earth,
+                point,
+                PopulationCasualtySystem.DigNormToDegrees(rad),
+                0.08f,
+                0.55f);
+        }
+
         if (digCount >= 10)
         {
             var core = earth.transform.Find("Core");

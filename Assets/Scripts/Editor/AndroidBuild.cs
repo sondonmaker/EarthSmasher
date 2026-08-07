@@ -15,7 +15,7 @@ using UnityEngine;
 public static class AndroidBuild
 {
     const string MainScene = "Assets/Scenes/SampleScene.unity";
-    const string PackageName = "com.sondonmaker.earthsmasher";
+    const string PackageName = "com.sunsoft.earthsmasher";
 
     public static void BuildApk()
     {
@@ -240,7 +240,7 @@ public static class AndroidBuild
         try
         {
             EnsureShadersIncluded();
-            PlayerSettings.companyName = "sondonmaker";
+            PlayerSettings.companyName = "sunsoft";
             PlayerSettings.productName = "Earth Smasher";
 
             string outDir = Path.GetFullPath(Path.Combine(Application.dataPath, "..", "Build", "Windows"));
@@ -276,7 +276,7 @@ public static class AndroidBuild
 
     static void ApplySettings()
     {
-        PlayerSettings.companyName = "sondonmaker";
+        PlayerSettings.companyName = "sunsoft";
         PlayerSettings.productName = "Earth Smasher";
 
         var android = NamedBuildTarget.Android;

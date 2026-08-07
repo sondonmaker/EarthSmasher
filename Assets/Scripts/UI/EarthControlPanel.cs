@@ -2,11 +2,11 @@ using UnityEngine;
 
 public class EarthControlPanel : MonoBehaviour
 {
-    public enum Tab { Overview, Climate, Disaster, Tool }
+    public enum Tab { Overview, Climate, Tool }
 
     [SerializeField] EarthBodyData body;
     [SerializeField] EarthLayerController layers;
-    [SerializeField] bool expanded = true;
+    [SerializeField] bool expanded = false;
     [SerializeField] Tab tab = Tab.Overview;
 
     public static bool BlocksGameplayInput { get; private set; }
@@ -18,12 +18,10 @@ public class EarthControlPanel : MonoBehaviour
 
     static readonly float[] RotationPresets = { 0.1f, 0.5f, 1f, 2f, 10f };
     static readonly string[] RotationLabels = { "x0.1", "x0.5", "x1", "x2", "x10" };
-    static readonly string[] TabNames = { "Overview", "Climate", "Disaster", "Tool" };
-    static readonly string[] TabIcons = { "O", "C", "D", "T" };
+    static readonly string[] TabIcons = { "◎", "☁", "☰" };
+    static readonly string[] TabTips = { "Overview", "Climate", "Tool" };
 
     GUIStyle _title;
-    GUIStyle _tabLabel;
-    GUIStyle _tabLabelOn;
     GUIStyle _nameStyle;
     GUIStyle _unitStyle;
     GUIStyle _valueStyle;
@@ -39,21 +37,6 @@ public class EarthControlPanel : MonoBehaviour
 
     Vector2 scroll;
     int tosFlash;
-    int nuclearUnits = 100;
-    string nuclearUnitsEdit = "100";
-    string statusMsg;
-
-    // Disaster accordion
-    int expandedDisaster = -1;
-    float asteroidDiameter = 1f;
-    string asteroidEdit = "1.0";
-    float icbmMt = 1f;
-    string icbmEdit = "1";
-    float earthquakeM = 1f;
-    string earthquakeEdit = "1.0";
-    string waterEdit = "1e20";
-    Texture2D expandBg;
-    Texture2D execBg;
 
     public void Bind(EarthBodyData data, EarthLayerController layerController)
     {
@@ -67,6 +50,21 @@ public class EarthControlPanel : MonoBehaviour
         expanded = true;
     }
 
+    public void ToggleExpanded()
+    {
+        expanded = !expanded;
+    }
+
+    public bool IsExpanded => expanded;
+
+    public void ResetToDefaults()
+    {
+        expanded = false;
+        tab = Tab.Overview;
+        scroll = Vector2.zero;
+        tosFlash = 0;
+    }
+
     void EnsureStyles()
     {
         if (_title != null)
@@ -78,8 +76,6 @@ public class EarthControlPanel : MonoBehaviour
         toggleOn = MakeTex(new Color(0.35f, 0.72f, 1f, 1f));
         toggleOff = MakeTex(new Color(0.28f, 0.3f, 0.34f, 1f));
         knob = MakeTex(Color.white);
-        expandBg = MakeTex(new Color(0.1f, 0.11f, 0.14f, 0.95f));
-        execBg = MakeTex(new Color(0.85f, 0.28f, 0.18f, 1f));
 
         GameSettings.Load();
 
@@ -90,17 +86,6 @@ public class EarthControlPanel : MonoBehaviour
             alignment = TextAnchor.MiddleCenter
         };
         _title.normal.textColor = Color.white;
-
-        _tabLabel = new GUIStyle(GUI.skin.label)
-        {
-            fontSize = 10,
-            alignment = TextAnchor.MiddleCenter
-        };
-        _tabLabel.normal.textColor = new Color(0.55f, 0.55f, 0.58f);
-
-        _tabLabelOn = new GUIStyle(_tabLabel);
-        _tabLabelOn.normal.textColor = Color.white;
-        _tabLabelOn.fontStyle = FontStyle.Bold;
 
         _nameStyle = new GUIStyle(GUI.skin.label)
         {
@@ -194,31 +179,30 @@ public class EarthControlPanel : MonoBehaviour
         GUI.Label(new Rect(r.x, r.y + 8, r.width, 36), "Earth", _title);
 
         float tabY = r.y + 48;
-        float tabW = (r.width - 20f) / 4f;
-        for (int i = 0; i < 4; i++)
+        float tabW = (r.width - 20f) / TabIcons.Length;
+        for (int i = 0; i < TabIcons.Length; i++)
         {
             Tab t = (Tab)i;
-            Rect tr = new Rect(r.x + 10 + tabW * i, tabY, tabW, 48);
+            Rect tr = new Rect(r.x + 10 + tabW * i, tabY, tabW, 44);
             bool on = tab == t;
 
-            if (GUI.Button(tr, GUIContent.none, GUIStyle.none))
+            if (GUI.Button(tr, new GUIContent(TabIcons[i], TabTips[i]), GUIStyle.none))
                 tab = t;
 
             var iconStyle = new GUIStyle(GUI.skin.label)
             {
-                fontSize = on ? 18 : 14,
+                fontSize = on ? 22 : 18,
                 alignment = TextAnchor.MiddleCenter,
                 fontStyle = FontStyle.Bold
             };
             iconStyle.normal.textColor = on ? Color.white : new Color(0.45f, 0.45f, 0.48f);
-            GUI.Label(new Rect(tr.x, tr.y, tr.width, 26), TabIcons[i], iconStyle);
-            GUI.Label(new Rect(tr.x, tr.y + 24, tr.width, 18), TabNames[i], on ? _tabLabelOn : _tabLabel);
+            GUI.Label(new Rect(tr.x, tr.y + 6f, tr.width, 32f), TabIcons[i], iconStyle);
 
             if (on)
-                GUI.DrawTexture(new Rect(tr.x + 10, tr.yMax - 3, tr.width - 20, 2), tabLine);
+                GUI.DrawTexture(new Rect(tr.x + 10, tr.yMax - 4, tr.width - 20, 2), tabLine);
         }
 
-        Rect content = new Rect(r.x + 12, tabY + 56, r.width - 24, r.height - (tabY + 56 - r.y) - 12);
+        Rect content = new Rect(r.x + 12, tabY + 52, r.width - 24, r.height - (tabY + 52 - r.y) - 12);
         GUILayout.BeginArea(content);
         scroll = GUILayout.BeginScrollView(scroll, false, false);
 
@@ -229,9 +213,6 @@ public class EarthControlPanel : MonoBehaviour
                 break;
             case Tab.Climate:
                 DrawClimate();
-                break;
-            case Tab.Disaster:
-                DrawDisaster();
                 break;
             case Tab.Tool:
                 DrawTool();
@@ -284,340 +265,6 @@ public class EarthControlPanel : MonoBehaviour
         StatRow("T", "Surface Temp", EarthBodyData.SurfaceTempC.ToString("0.0"), "C");
         StatRow("P", "Atmospheric Pressure", ((int)EarthBodyData.AtmosphericPressureMbar).ToString("#,0"), "mbar");
         StatRow("C", "Carbon Dioxide", EarthBodyData.CarbonDioxidePpm.ToString("0"), "ppm");
-    }
-
-    void DrawDisaster()
-    {
-        GUILayout.Label("Weapons moved to the right icon rail.\n(Impact / Missile / War / Fleet / Laser / Meme)", _hint);
-        GUILayout.Space(8);
-        if (GUILayout.Button("Open Meme Weapons", GUILayout.Height(36)))
-        {
-            var rail = FindObjectOfType<WeaponRailPanel>();
-            if (rail != null)
-                rail.OpenCategory(5);
-            expanded = false;
-        }
-        if (GUILayout.Button("Open Weapon Rail", GUILayout.Height(36)))
-        {
-            var rail = FindObjectOfType<WeaponRailPanel>();
-            if (rail != null)
-                rail.OpenCategory(0);
-            expanded = false;
-        }
-        GUILayout.Space(12);
-
-        DrawDisasterItem(0, "$", "Planetary Collision", "200", "sci", false,
-            "Cost 200 science. Crash another planet into Earth.",
-            () => ExecuteStub("Planetary Collision"));
-
-        DrawDisasterItem(1, "A", "Asteroid Diameter", asteroidEdit, "km", true,
-            "Set asteroid size, then Execute to drop it.",
-            () =>
-            {
-                if (float.TryParse(asteroidEdit, out float v))
-                    asteroidDiameter = Mathf.Clamp(v, 0.1f, 500f);
-                asteroidEdit = asteroidDiameter.ToString("0.#");
-                ExecuteStub($"Asteroid {asteroidDiameter:0.#} km");
-            },
-            () => DrawFloatEditor(ref asteroidEdit, ref asteroidDiameter, 0.1f, 500f, 0.5f));
-
-        DrawDisasterItem(2, "I", "ICBM", icbmEdit, "Mt", true,
-            "Nuclear missile yield (megatons).",
-            () =>
-            {
-                if (float.TryParse(icbmEdit, out float v))
-                    icbmMt = Mathf.Clamp(v, 0.1f, 1000f);
-                icbmEdit = icbmMt.ToString("0.#");
-                ExecuteStub($"ICBM {icbmMt:0.#} Mt");
-            },
-            () => DrawFloatEditor(ref icbmEdit, ref icbmMt, 0.1f, 1000f, 1f));
-
-        DrawDisasterItem(3, "N", "Nuclear War", nuclearUnitsEdit, "unit", true,
-            "Global nuclear exchange. Units scale casualties & blasts.",
-            ExecuteNuclearWar,
-            () => DrawIntEditor(ref nuclearUnitsEdit, ref nuclearUnits, 1, 500, 10));
-
-        DrawDisasterItem(4, "E", "Earthquake", earthquakeEdit, "M", true,
-            "Richter magnitude. Shake, cracks, aftershocks, casualties.",
-            ExecuteEarthquake,
-            () => DrawFloatEditor(ref earthquakeEdit, ref earthquakeM, 0.1f, 12f, 0.5f));
-
-        string moonVal = "—";
-        var moonSys = MoonImpactSystem.Instance;
-        if (moonSys != null)
-            moonVal = moonSys.LastMode == MoonImpactMode.Crash ? "Crash" : "Orbit";
-
-        DrawDisasterItem(5, "M", "Moon Impact", moonVal, "", false,
-            "Orbit: Moon flies past (near-miss, tidal quakes).\nCrash: Moon hits Earth hard.",
-            null,
-            DrawMoonImpactButtons);
-
-        DrawDisasterItem(6, "W", "Water Planet", waterEdit, "L", true,
-            "Flood volume applied to the planet.",
-            () => ExecuteStub($"Water Planet {waterEdit} L"),
-            () =>
-            {
-                GUILayout.BeginHorizontal();
-                GUILayout.Label("Volume", _nameStyle, GUILayout.Width(70));
-                waterEdit = GUILayout.TextField(waterEdit, _valueStyle, GUILayout.Height(28));
-                GUILayout.Label("L", _unitStyle, GUILayout.Width(20));
-                GUILayout.EndHorizontal();
-            });
-
-        if (!string.IsNullOrEmpty(statusMsg))
-        {
-            GUILayout.Space(8);
-            GUILayout.Label(statusMsg, _hint);
-        }
-    }
-
-    void DrawDisasterItem(
-        int id,
-        string icon,
-        string name,
-        string value,
-        string unit,
-        bool editable,
-        string description,
-        System.Action onExecute,
-        System.Action drawEditor = null)
-    {
-        bool open = expandedDisaster == id;
-        float h = 40f;
-        Rect row = GUILayoutUtility.GetRect(1, h, GUILayout.ExpandWidth(true));
-
-        if (open && expandBg != null)
-            GUI.DrawTexture(row, expandBg);
-
-        var iconStyle = new GUIStyle(GUI.skin.label)
-        {
-            fontSize = 16,
-            alignment = TextAnchor.MiddleCenter
-        };
-        iconStyle.normal.textColor = new Color(0.75f, 0.78f, 0.85f);
-        GUI.Label(new Rect(row.x, row.y, 28, h), icon, iconStyle);
-        GUI.Label(new Rect(row.x + 30, row.y, 118, h), name, _nameStyle);
-
-        float boxW = 64f;
-        Rect box = new Rect(row.x + 148, row.y + 6, boxW, h - 12);
-        GUI.Box(box, GUIContent.none, _boxStyle);
-        GUI.Label(box, value, _valueStyle);
-        if (!string.IsNullOrEmpty(unit))
-            GUI.Label(new Rect(box.xMax + 4, row.y, 40, h), unit, _unitStyle);
-
-        var chev = new GUIStyle(_unitStyle) { alignment = TextAnchor.MiddleCenter, fontSize = 14 };
-        chev.normal.textColor = Color.white;
-        GUI.Label(new Rect(row.xMax - 22, row.y, 20, h), open ? "v" : ">", chev);
-
-        if (GUI.Button(row, GUIContent.none, GUIStyle.none))
-            expandedDisaster = open ? -1 : id;
-
-        GUILayout.Space(2);
-        if (!open)
-            return;
-
-        // ScrollView 안에서는 BeginArea 쓰지 말 것 — 버튼이 잘리거나 안 보임
-        var descStyle = new GUIStyle(_hint)
-        {
-            alignment = TextAnchor.UpperLeft,
-            wordWrap = true,
-            fontSize = 11
-        };
-
-        GUILayout.BeginVertical(_boxStyle);
-        GUILayout.Space(4);
-        GUILayout.Label(description, descStyle);
-        GUILayout.Space(4);
-
-        if (drawEditor != null)
-            drawEditor();
-
-        if (onExecute != null)
-        {
-            GUILayout.Space(8);
-
-            bool busy = IsDisasterBusy(id);
-            Color prev = GUI.backgroundColor;
-            GUI.backgroundColor = busy
-                ? new Color(0.45f, 0.25f, 0.18f)
-                : new Color(0.92f, 0.28f, 0.16f);
-            GUI.enabled = !busy;
-
-            string execLabel = busy ? "Running..." : "Execute";
-            if (GUILayout.Button(execLabel, GUILayout.Height(36)))
-                onExecute.Invoke();
-
-            GUI.enabled = true;
-            GUI.backgroundColor = prev;
-        }
-
-        GUILayout.Space(4);
-        GUILayout.EndVertical();
-        GUILayout.Space(8);
-    }
-
-    void DrawMoonImpactButtons()
-    {
-        bool busy = IsDisasterBusy(5);
-        Color prev = GUI.backgroundColor;
-        GUI.backgroundColor = busy
-            ? new Color(0.45f, 0.25f, 0.18f)
-            : new Color(0.92f, 0.28f, 0.16f);
-        GUI.enabled = !busy;
-
-        GUILayout.Space(4);
-        if (GUILayout.Button(busy ? "Running..." : "Orbit — Flyby (no hit)", GUILayout.Height(36)))
-            ExecuteMoonImpact(MoonImpactMode.Orbit);
-
-        GUILayout.Space(6);
-        if (GUILayout.Button(busy ? "Running..." : "Crash — Direct Impact", GUILayout.Height(36)))
-            ExecuteMoonImpact(MoonImpactMode.Crash);
-
-        GUI.enabled = true;
-        GUI.backgroundColor = prev;
-    }
-
-    void ExecuteMoonImpact(MoonImpactMode mode)
-    {
-        var moon = MoonImpactSystem.Instance;
-        if (moon == null)
-        {
-            statusMsg = "MoonImpactSystem missing";
-            return;
-        }
-        if (!moon.TryStart(mode))
-        {
-            statusMsg = "Moon event already running";
-            return;
-        }
-
-        statusMsg = mode == MoonImpactMode.Crash
-            ? "Moon Crash in progress..."
-            : "Moon Orbit flyby in progress...";
-        expanded = false;
-        expandedDisaster = -1;
-    }
-
-    void DrawFloatEditor(ref string edit, ref float value, float min, float max, float step)
-    {
-        GUILayout.BeginHorizontal();
-        if (GUILayout.Button("-", GUILayout.Width(32), GUILayout.Height(28)))
-        {
-            value = Mathf.Max(min, value - step);
-            edit = value.ToString("0.##");
-        }
-        edit = GUILayout.TextField(edit, _valueStyle, GUILayout.Height(28));
-        if (float.TryParse(edit, out float parsed))
-            value = Mathf.Clamp(parsed, min, max);
-        if (GUILayout.Button("+", GUILayout.Width(32), GUILayout.Height(28)))
-        {
-            value = Mathf.Min(max, value + step);
-            edit = value.ToString("0.##");
-        }
-        GUILayout.EndHorizontal();
-    }
-
-    void DrawIntEditor(ref string edit, ref int value, int min, int max, int step)
-    {
-        GUILayout.BeginHorizontal();
-        if (GUILayout.Button("-", GUILayout.Width(32), GUILayout.Height(28)))
-        {
-            value = Mathf.Max(min, value - step);
-            edit = value.ToString();
-        }
-        edit = GUILayout.TextField(edit, _valueStyle, GUILayout.Height(28));
-        if (int.TryParse(edit, out int parsed))
-            value = Mathf.Clamp(parsed, min, max);
-        if (GUILayout.Button("+", GUILayout.Width(32), GUILayout.Height(28)))
-        {
-            value = Mathf.Min(max, value + step);
-            edit = value.ToString();
-        }
-        GUILayout.Label("unit", _unitStyle, GUILayout.Width(36));
-        GUILayout.EndHorizontal();
-    }
-
-    static bool IsDisasterBusy(int id)
-    {
-        if (id == 3)
-        {
-            var war = NuclearWarSystem.Instance;
-            return war != null && war.IsRunning;
-        }
-        if (id == 4)
-        {
-            var quake = EarthquakeSystem.Instance;
-            return quake != null && quake.IsRunning;
-        }
-        if (id == 5)
-        {
-            var moon = MoonImpactSystem.Instance;
-            return moon != null && moon.IsRunning;
-        }
-        return false;
-    }
-
-    void ExecuteNuclearWar()
-    {
-        ParseNuclearUnits();
-        var war = NuclearWarSystem.Instance;
-        if (war == null)
-        {
-            statusMsg = "NuclearWarSystem missing";
-            return;
-        }
-        if (war.TryStart(nuclearUnits))
-        {
-            statusMsg = $"Executing Nuclear War ({nuclearUnits} unit)...";
-            expanded = false;
-            expandedDisaster = -1;
-        }
-        else
-        {
-            statusMsg = "Nuclear War already running";
-        }
-    }
-
-    void ExecuteEarthquake()
-    {
-        if (float.TryParse(earthquakeEdit, out float v))
-            earthquakeM = Mathf.Clamp(v, 0.1f, 12f);
-        earthquakeEdit = earthquakeM.ToString("0.0");
-
-        var quake = EarthquakeSystem.Instance;
-        if (quake == null)
-        {
-            statusMsg = "EarthquakeSystem missing";
-            return;
-        }
-        if (quake.IsRunning)
-        {
-            statusMsg = "Earthquake already running";
-            return;
-        }
-
-        EarthquakeConfirmUI.Ensure().Open(earthquakeM);
-        statusMsg = "Confirm random epicenter to proceed.";
-        expanded = false;
-        expandedDisaster = -1;
-    }
-
-    void ExecuteStub(string name)
-    {
-        statusMsg = $"{name} — Execute queued (effect coming soon)";
-    }
-
-    void EditableUnitRow(string icon, string name, ref string edit, ref int value, string unit)
-    {
-        // kept for compatibility; disaster UI uses accordion now
-        DrawIntEditor(ref edit, ref value, 1, 500, 10);
-    }
-
-    void ParseNuclearUnits()
-    {
-        if (int.TryParse(nuclearUnitsEdit, out int v))
-            nuclearUnits = Mathf.Clamp(v, 1, 500);
-        nuclearUnitsEdit = nuclearUnits.ToString();
     }
 
     void StatRow(string icon, string name, string value, string unit)

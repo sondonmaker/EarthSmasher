@@ -24,6 +24,8 @@ public class EarthCraterDeform : MonoBehaviour
     int digCountSalt;
     readonly List<DigSite> sites = new List<DigSite>();
 
+    public int DigSiteCount => sites.Count;
+
     class DigSite
     {
         public Vector3 dir;
@@ -89,6 +91,64 @@ public class EarthCraterDeform : MonoBehaviour
         workingCrust.vertices = pristineVerts;
         workingCrust.RecalculateBounds();
         meshDirty = true;
+    }
+
+    public bool TryExportVertices(out Vector3[] verts)
+    {
+        EnsureReady();
+        if (workingCrust == null)
+        {
+            verts = null;
+            return false;
+        }
+
+        verts = workingCrust.vertices;
+        return verts != null && verts.Length > 0;
+    }
+
+    public bool TryImportVertices(Vector3[] verts)
+    {
+        EnsureReady();
+        if (workingCrust == null || verts == null || verts.Length != workingCrust.vertexCount)
+            return false;
+
+        workingCrust.vertices = verts;
+        workingCrust.RecalculateBounds();
+        meshDirty = true;
+
+        var col = GetComponent<MeshCollider>();
+        if (col != null)
+            col.sharedMesh = workingCrust;
+        return true;
+    }
+
+    /// <summary>0~1 — 메시가 얼마나 판/깎였는지.</summary>
+    public float SampleCrustDamage01()
+    {
+        EnsureReady();
+        if (workingCrust == null || pristineVerts == null)
+            return 0f;
+
+        Vector3[] verts = workingCrust.vertices;
+        if (verts == null || verts.Length == 0)
+            return 0f;
+
+        int step = Mathf.Max(1, verts.Length / 9000);
+        float sum = 0f;
+        int n = 0;
+        for (int i = 0; i < verts.Length; i += step)
+        {
+            float baseMag = pristineVerts[i].magnitude;
+            if (baseMag < 1e-5f)
+                continue;
+            float shrink = Mathf.Clamp01((baseMag - verts[i].magnitude) / (baseMag * 0.2f));
+            sum += shrink;
+            n++;
+        }
+
+        float avg = n > 0 ? sum / n : 0f;
+        float siteBoost = Mathf.InverseLerp(0f, 36f, sites.Count) * 0.38f;
+        return Mathf.Clamp01(avg * 1.2f + siteBoost);
     }
 
     /// <summary>기존 MeshFilter 메시만 Instantiate. UV 재작성/리메시 절대 금지.</summary>
@@ -301,6 +361,47 @@ public class EarthCraterDeform : MonoBehaviour
     public void CarveHole(Vector3 worldPoint, float radiusNorm, float depthNorm)
     {
         DrillBore(worldPoint, radiusNorm, depthNorm, minShellRadius);
+    }
+
+    /// <summary>홀드 빔 — 표면을 따라 얕은 홈을 이어 파낸다.</summary>
+    public void DigGrooveSegment(Vector3 fromWorld, Vector3 toWorld, float radiusNorm, float depthNorm, int seed = 0)
+    {
+        EnsureReady();
+        if (workingCrust == null || !UvLockIntact(workingCrust))
+            return;
+
+        Vector3 center = transform.position;
+        Vector3 a = (fromWorld - center).normalized;
+        Vector3 b = (toWorld - center).normalized;
+        if (a.sqrMagnitude < 1e-6f || b.sqrMagnitude < 1e-6f)
+        {
+            DrillBore(toWorld, radiusNorm, depthNorm, minShellRadius);
+            return;
+        }
+
+        float angleDeg = Vector3.Angle(a, b);
+        int steps = Mathf.Clamp(Mathf.CeilToInt(angleDeg / 1.6f), 1, 28);
+        float radius = Mathf.Clamp(radiusNorm, 0.006f, 0.04f);
+        float depth = Mathf.Clamp(depthNorm, 0.006f, 0.045f);
+        if (seed == 0)
+            seed = HashDir(a) ^ HashDir(b);
+
+        for (int i = 0; i <= steps; i++)
+        {
+            float t = i / (float)steps;
+            Vector3 dir = Vector3.Slerp(a, b, t).normalized;
+            float fall = 1f - t * 0.1f;
+            DeformVerticesOnly(workingCrust, dir, radius, depth * fall, 0f, seed + i * 41, minShellRadius);
+        }
+
+        if (!UvLockIntact(workingCrust))
+        {
+            ready = false;
+            workingCrust = null;
+            return;
+        }
+
+        RefreshCollider();
     }
 
     /// <summary>

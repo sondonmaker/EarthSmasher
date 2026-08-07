@@ -27,7 +27,7 @@ public class ImpactCrater : MonoBehaviour
         Apply(earth, worldPoint, normal, Mathf.Clamp(radiusNorm, 0.14f, 0.24f), true);
     }
 
-    static void Apply(EarthPlanet earth, Vector3 worldPoint, Vector3 normal, float radiusNorm, bool huge)
+    static void Apply(EarthPlanet earth, Vector3 worldPoint, Vector3 normal, float radiusNorm, bool huge, bool lavaScar = true)
     {
         if (earth == null)
             return;
@@ -40,11 +40,20 @@ public class ImpactCrater : MonoBehaviour
         if (deform != null)
             hits = deform.Dig(worldPoint, radiusNorm, huge ? 0.09f : 0.045f, huge, seed);
 
-        SpawnLavaScar(earth.transform, normal, radiusNorm * (1f + (hits - 1) * 0.08f), huge, seed);
+        if (lavaScar)
+            SpawnLavaScar(earth.transform, normal, radiusNorm * (1f + (hits - 1) * 0.08f), huge, seed);
 
         var scorch = EarthSurfaceScorch.Ensure(earth);
         if (scorch != null)
             scorch.PaintImpactCrater(worldPoint, radiusNorm * 1.15f, seed);
+    }
+
+    /// <summary>운석 타격과 동일 — 지형 Dig + 용암 흉터 + 크레이터 텍스처.</summary>
+    public static void ApplyStrike(EarthPlanet earth, Vector3 worldPoint, Vector3 normal, float radiusNorm, bool lavaScar = true)
+    {
+        if (earth == null)
+            return;
+        Apply(earth, worldPoint, normal, Mathf.Clamp(radiusNorm, 0.028f, 0.16f), false, lavaScar);
     }
 
     static int HashSeed(Vector3 p, float r)

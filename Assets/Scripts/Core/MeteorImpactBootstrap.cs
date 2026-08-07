@@ -53,12 +53,6 @@ public class MeteorImpactBootstrap : MonoBehaviour
         if (cam.orthographic == false)
             cam.fieldOfView = 42f;
 
-        if (FindObjectOfType<ZoomControls>() == null)
-        {
-            var zoomGo = new GameObject("ZoomControls");
-            zoomGo.AddComponent<ZoomControls>().Bind(orbit);
-        }
-
         ImpactHud hud = FindObjectOfType<ImpactHud>();
         if (hud == null && createHud)
             hud = CreateHud();
@@ -107,6 +101,7 @@ public class MeteorImpactBootstrap : MonoBehaviour
         SpacecraftFleetSystem.Ensure();
         LaserStrikeSystem.Ensure();
         MemeAttackSystem.Ensure().Configure(earth);
+        GreekMythAttackSystem.Ensure().Configure(earth);
 
         var quake = FindObjectOfType<EarthquakeSystem>();
         if (quake == null)
@@ -130,6 +125,12 @@ public class MeteorImpactBootstrap : MonoBehaviour
             var panelGo = new GameObject("EarthControlPanel");
             panelGo.AddComponent<EarthControlPanel>().Bind(body, layers);
         }
+
+        if (FindObjectOfType<EarthSettingsPanel>() == null)
+            new GameObject("EarthSettingsPanel").AddComponent<EarthSettingsPanel>();
+
+        if (FindObjectOfType<EarthSaveRunner>() == null)
+            new GameObject("EarthSaveRunner").AddComponent<EarthSaveRunner>();
     }
 
     void SetupLighting()
@@ -213,6 +214,8 @@ public class MeteorImpactBootstrap : MonoBehaviour
         var panelGo = new GameObject("EarthControlPanel");
         var panel = panelGo.AddComponent<EarthControlPanel>();
         panel.Bind(body, layers);
+
+        new GameObject("EarthSettingsPanel").AddComponent<EarthSettingsPanel>();
 
         return planet;
     }

@@ -253,6 +253,44 @@ public class OrbitCamera : MonoBehaviour
         distance = Mathf.Lerp(minDistance, maxDistance, Mathf.Clamp01(t));
     }
 
+    public void GetOrbitState(out float outYaw, out float outPitch, out float outDistance)
+    {
+        outYaw = yaw;
+        outPitch = pitch;
+        outDistance = distance;
+    }
+
+    public void SetOrbitState(float outYaw, float outPitch, float outDistance)
+    {
+        yaw = outYaw;
+        pitch = Mathf.Clamp(outPitch, minPitch, maxPitch);
+        distance = Mathf.Clamp(outDistance, minDistance, maxDistance);
+        _focusing = false;
+        _surfaceFocus = false;
+        _chasing = false;
+    }
+
+    public void ResetToDefaults()
+    {
+        EndChase(false);
+        _focusing = false;
+        _surfaceFocus = false;
+        _dragging = false;
+        _chaseSubject = null;
+        _chaseLookAt = null;
+        yaw = 30f;
+        pitch = 12f;
+
+        if (target != null)
+        {
+            var earth = target.GetComponent<EarthPlanet>();
+            if (earth != null)
+                FramePlanet(earth.Radius, 0.58f);
+        }
+
+        ApplyTransform();
+    }
+
     void LateUpdate()
     {
         if (target == null && !_chasing) return;
@@ -307,7 +345,7 @@ public class OrbitCamera : MonoBehaviour
         }
 
         HandleZoom();
-        if (!_focusing && !uiBlocks)
+        if (!_focusing && !uiBlocks && !WeaponRailPanel.BlocksOrbitCamera)
             HandleOrbit();
 
         if (!_surfaceFocus || !_focusing)

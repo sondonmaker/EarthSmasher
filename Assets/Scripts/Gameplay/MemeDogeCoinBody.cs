@@ -77,8 +77,12 @@ public class MemeDogeCoinBody : MonoBehaviour
         if (_earth != null)
             _earth.ApplyImpact(_impact, _damage);
 
-        CinematicExplosion.Play(_impact, _normal, _power);
-        ImpactShockwave.Spawn(_impact, _normal, _earth != null ? _earth.Radius * 0.8f : 2f);
+        MemeAttackSystem.MemeBurst(
+            _impact,
+            _normal,
+            _earth != null ? _earth.Radius : 2.5f,
+            _power * 0.5f,
+            MemeBurstStyle.DogeCoin);
         if (_earth != null)
         {
             ImpactCrater.Spawn(_earth.transform, _impact, _normal, 1.35f);
@@ -88,7 +92,6 @@ public class MemeDogeCoinBody : MonoBehaviour
             _earth.StartCoroutine(MoltenCrackFx.Play(_earth, _impact, 0.1f));
         }
 
-        CameraShake.Shake(0.55f, 0.35f);
         _onDone?.Invoke();
         Destroy(gameObject);
     }

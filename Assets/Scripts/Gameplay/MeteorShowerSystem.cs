@@ -53,6 +53,12 @@ public class MeteorShowerSystem : MonoBehaviour
         return true;
     }
 
+    public void Abort()
+    {
+        StopAllCoroutines();
+        IsRunning = false;
+    }
+
     IEnumerator Run(Vector3? worldCenter)
     {
         IsRunning = true;
@@ -90,6 +96,7 @@ public class MeteorShowerSystem : MonoBehaviour
         Object.Destroy(go.GetComponent<Collider>());
         go.GetComponent<Renderer>().material = RuntimeMaterial.Opaque(
             new Color(0.32f, 0.24f, 0.18f), 0.2f);
+        ProFxParticleSpawner.AttachMeteorBody(go.transform, true, earth.Radius);
         go.AddComponent<MeteorTrail>();
         var proj = go.AddComponent<MeteorProjectile>();
         proj.Launch(earth, point, normal, damage);

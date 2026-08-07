@@ -15,13 +15,19 @@ public class ImpactShockwave : MonoBehaviour
 
     public static void Spawn(Vector3 position, Vector3 normal, float size)
     {
+        Spawn(position, normal, size, new Color(1f, 0.55f, 0.15f, 0.9f));
+    }
+
+    public static void Spawn(Vector3 position, Vector3 normal, float size, Color color)
+    {
         var go = new GameObject("ShockwaveRing");
         go.transform.position = position + normal * 0.08f;
         go.transform.rotation = Quaternion.LookRotation(normal);
 
         var sw = go.AddComponent<ImpactShockwave>();
-        sw.startRadius = size * 0.15f;
-        sw.endRadius = size * 1.4f;
+        sw._color = color;
+        sw.startRadius = size * 0.12f;
+        sw.endRadius = size * 0.85f;
         sw.BuildRing();
         Destroy(go, 0.7f);
     }

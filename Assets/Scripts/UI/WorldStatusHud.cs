@@ -9,12 +9,16 @@ public class WorldStatusHud : MonoBehaviour
     public static WorldStatusHud Instance { get; private set; }
     public static bool BlocksGameplay { get; private set; }
 
-    [SerializeField] int sciencePoints = 600;
+    public const float DefaultSimSpeed = 0.3f;
+    public const int DefaultSciencePoints = 600;
+    static readonly DateTime DefaultSimDate = new DateTime(2026, 8, 23);
+
+    [SerializeField] int sciencePoints = DefaultSciencePoints;
     [SerializeField] float minSpeed = 0.01f;
     [SerializeField] float maxSpeed = 100f;
-    [SerializeField] float simSpeed = 0.1f;
+    [SerializeField] float simSpeed = DefaultSimSpeed;
 
-    DateTime simDate = new DateTime(2026, 8, 23);
+    DateTime simDate = DefaultSimDate;
     float dayAccumulator;
 
     Texture2D barBg;
@@ -27,6 +31,7 @@ public class WorldStatusHud : MonoBehaviour
     GUIStyle pillStyle;
     GUIStyle iconStyle;
     GUIStyle iconButtonStyle;
+    GUIStyle iconActiveStyle;
     GUIStyle iconDimStyle;
     GUIStyle alertStyle;
     GUIStyle statusStyle;
@@ -45,9 +50,39 @@ public class WorldStatusHud : MonoBehaviour
 
     public float SimSpeed => Mathf.Clamp(simSpeed, minSpeed, maxSpeed);
 
+    public void ApplyDefaultSimSpeed() => simSpeed = DefaultSimSpeed;
+
+    public void ResetToDefaults()
+    {
+        simSpeed = DefaultSimSpeed;
+        sciencePoints = DefaultSciencePoints;
+        simDate = DefaultSimDate;
+        dayAccumulator = 0f;
+        statusMsg = null;
+        statusUntil = 0f;
+    }
+
+    public void CaptureSimState(out string dateIso, out float dayAcc, out float speed, out int science)
+    {
+        dateIso = simDate.ToString("yyyy-MM-dd");
+        dayAcc = dayAccumulator;
+        speed = simSpeed;
+        science = sciencePoints;
+    }
+
+    public void ApplySimState(string dateIso, float dayAcc, float speed, int science)
+    {
+        if (!string.IsNullOrEmpty(dateIso) && DateTime.TryParse(dateIso, out var parsed))
+            simDate = parsed;
+        dayAccumulator = Mathf.Max(0f, dayAcc);
+        simSpeed = Mathf.Clamp(speed, minSpeed, maxSpeed);
+        sciencePoints = Mathf.Max(0, science);
+    }
+
     void Awake()
     {
         Instance = this;
+        simSpeed = DefaultSimSpeed;
     }
 
     void OnDestroy()
@@ -62,7 +97,7 @@ public class WorldStatusHud : MonoBehaviour
         {
             resetRequested = false;
             bool done = EarthResetSystem.ResetEarth();
-            statusMsg = done ? "EARTH RESTORED" : "EARTH NOT FOUND";
+            statusMsg = done ? "GAME RESET" : "EARTH NOT FOUND";
             statusUntil = Time.unscaledTime + 2.5f;
         }
 
@@ -134,6 +169,12 @@ public class WorldStatusHud : MonoBehaviour
         iconButtonStyle.focused.background = null;
         iconButtonStyle.focused.textColor = Color.white;
 
+        iconActiveStyle = new GUIStyle(iconButtonStyle);
+        iconActiveStyle.normal.background = accentBg;
+        iconActiveStyle.normal.textColor = Color.white;
+        iconActiveStyle.hover.background = accentBg;
+        iconActiveStyle.active.background = accentBg;
+
         // 아직 기능이 없는 단축 아이콘
         iconDimStyle = new GUIStyle(iconStyle);
         iconDimStyle.normal.textColor = new Color(1f, 1f, 1f, 0.35f);
@@ -189,21 +230,9 @@ public class WorldStatusHud : MonoBehaviour
         x = DrawSpeedControls(x, y, rowH);
         x += 16f;
 
-        // Center icons
-        x = DrawIconButton(x, y, rowH, "X", "Reset Earth", ResetEarthState);
-        x = DrawIconButton(x, y, rowH, "O", "Recenter", () =>
-        {
-            var earth = FindObjectOfType<EarthPlanet>();
-            if (orbit != null && earth != null)
-            {
-                orbit.SetTarget(earth.transform);
-                orbit.FramePlanet(earth.Radius, 0.82f);
-            }
-        });
-        x = DrawIconButton(x, y, rowH, "N", "Tech", null);
-        x = DrawIconButton(x, y, rowH, "S", "Shop", null);
-        x = DrawIconButton(x, y, rowH, "A", "Ads", null);
-        x = DrawIconButton(x, y, rowH, "C", "Calendar", null);
+        // Top actions — reset + earth panel only
+        x = DrawIconButton(x, y, rowH, "↺", "Reset Earth", ResetEarthState);
+        x = DrawIconButton(x, y, rowH, "☰", "Earth Panel", ToggleEarthPanel, IsEarthPanelOpen());
 
         // Right pills: science then population (pop farthest right like reference)
         float right = MobileUi.Width - pad;
@@ -228,6 +257,20 @@ public class WorldStatusHud : MonoBehaviour
         var rail = FindObjectOfType<WeaponRailPanel>();
         if (rail != null)
             rail.ClearArm();
+    }
+
+    void ToggleEarthPanel()
+    {
+        var panel = FindObjectOfType<EarthControlPanel>();
+        if (panel == null)
+            return;
+        panel.ToggleExpanded();
+    }
+
+    static bool IsEarthPanelOpen()
+    {
+        var panel = UnityEngine.Object.FindObjectOfType<EarthControlPanel>();
+        return panel != null && panel.IsExpanded;
     }
 
     float DrawSpeedControls(float x, float y, float h)
@@ -264,7 +307,7 @@ public class WorldStatusHud : MonoBehaviour
         float[] nice =
         {
             0.01f, 0.02f, 0.05f, 0.1f, 0.2f, 0.5f,
-            1f, 2f, 5f, 10f, 20f, 50f, 100f
+            1f, 1.5f, 2f, 5f, 10f, 20f, 50f, 100f
         };
         float best = simSpeed;
         float bestDist = float.MaxValue;
@@ -293,14 +336,13 @@ public class WorldStatusHud : MonoBehaviour
         return Mathf.Pow(10f, log);
     }
 
-    float DrawIconButton(float x, float y, float h, string icon, string tip, Action onClick)
+    float DrawIconButton(float x, float y, float h, string icon, string tip, Action onClick, bool active = false)
     {
-        // 손가락 탭이 빗나가지 않게 바 높이만큼 히트 영역을 넉넉히 잡는다
         Rect r = new Rect(x, y - 4f, 36f, h + 8f);
 
         if (onClick == null)
             GUI.Label(r, icon, iconDimStyle);
-        else if (GUI.Button(r, icon, iconButtonStyle))
+        else if (GUI.Button(r, icon, active ? iconActiveStyle : iconButtonStyle))
             onClick.Invoke();
 
         return x + 40f;

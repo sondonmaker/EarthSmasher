@@ -51,7 +51,8 @@ public class BigMeteorStrike : MonoBehaviour
     void Update()
     {
         if (earth == null) return;
-        if (EarthLayerToolbar.BlocksGameplayInput || ZoomUiBlocker.BlocksGameplay || WorldStatusHud.BlocksGameplay) return;
+        if (EarthLayerToolbar.BlocksGameplayInput || EarthSettingsPanel.BlocksGameplayInput
+            || ZoomUiBlocker.BlocksGameplay || WorldStatusHud.BlocksGameplay) return;
         if (WeaponRailPanel.BlocksGameplay) return;
         if (WeaponRailPanel.IsArmed) return;
         if (DisasterUiGate.ModalOpen) return;
@@ -99,6 +100,7 @@ public class BigMeteorStrike : MonoBehaviour
         }
 
         go.AddComponent<MeteorTrail>();
+        ProFxParticleSpawner.AttachMeteorBody(go.transform, false, earth.Radius);
 
         var body = go.AddComponent<BigMeteorBody>();
         body.Launch(earth, impactPoint, normal, speed, approachDistanceMul, damage, explosionPower, null);

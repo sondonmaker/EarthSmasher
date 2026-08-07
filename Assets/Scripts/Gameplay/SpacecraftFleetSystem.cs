@@ -20,6 +20,38 @@ public class SpacecraftFleetSystem : MonoBehaviour
     static readonly List<FleetUfo> LiveUfos = new List<FleetUfo>();
     static readonly List<FleetBattleship> LiveBattleships = new List<FleetBattleship>();
 
+    const int MaxLiveUfos = 8;
+    const float UfoGroundFxCooldown = 0.4f;
+    static float nextUfoGroundFxTime;
+    static int lastUfoListCleanFrame;
+    static Material sharedTractorBeamMat;
+
+    public static int LiveUfoCount
+    {
+        get
+        {
+            PruneUfoList();
+            return LiveUfos.Count;
+        }
+    }
+
+    static void PruneUfoList()
+    {
+        for (int i = LiveUfos.Count - 1; i >= 0; i--)
+        {
+            if (LiveUfos[i] == null)
+                LiveUfos.RemoveAt(i);
+        }
+    }
+
+    public static bool TryConsumeUfoGroundFx()
+    {
+        if (Time.time < nextUfoGroundFxTime)
+            return false;
+        nextUfoGroundFxTime = Time.time + UfoGroundFxCooldown;
+        return true;
+    }
+
     [SerializeField] EarthPlanet earth;
     [SerializeField] Camera cam;
 
@@ -31,6 +63,24 @@ public class SpacecraftFleetSystem : MonoBehaviour
         if (s != null)
             return s;
         return new GameObject("SpacecraftFleetSystem").AddComponent<SpacecraftFleetSystem>();
+    }
+
+    public void Abort()
+    {
+        StopAllCoroutines();
+        IsBusy = false;
+        for (int i = LiveUfos.Count - 1; i >= 0; i--)
+        {
+            if (LiveUfos[i] != null)
+                Object.Destroy(LiveUfos[i].gameObject);
+        }
+        LiveUfos.Clear();
+        for (int i = LiveBattleships.Count - 1; i >= 0; i--)
+        {
+            if (LiveBattleships[i] != null)
+                Object.Destroy(LiveBattleships[i].gameObject);
+        }
+        LiveBattleships.Clear();
     }
 
     public static void RegisterUfo(FleetUfo ufo)
@@ -57,7 +107,12 @@ public class SpacecraftFleetSystem : MonoBehaviour
 
     public static FleetUfo FindNearestUfo(Vector3 from)
     {
-        LiveUfos.RemoveAll(u => u == null);
+        if (Time.frameCount - lastUfoListCleanFrame > 45)
+        {
+            PruneUfoList();
+            lastUfoListCleanFrame = Time.frameCount;
+        }
+
         FleetUfo best = null;
         float bestSq = float.MaxValue;
         for (int i = 0; i < LiveUfos.Count; i++)
@@ -113,6 +168,9 @@ public class SpacecraftFleetSystem : MonoBehaviour
         {
             hasAimOverride = false;
         }
+
+        if (kind == SpacecraftKind.Ufo && LiveUfoCount >= MaxLiveUfos)
+            return false;
 
         StartCoroutine(Run(kind));
         return true;
@@ -180,26 +238,44 @@ public class SpacecraftFleetSystem : MonoBehaviour
         return go;
     }
 
-    public static void AlignBeam(Transform beam, Vector3 from, Vector3 to)
+    public static void AlignBeam(Transform beam, Vector3 from, Vector3 to, float width = 0.04f)
     {
         Vector3 mid = (from + to) * 0.5f;
         float len = Vector3.Distance(from, to) * 0.5f;
         beam.position = mid;
         beam.up = (from - to).normalized;
-        var s = beam.localScale;
-        s.y = Mathf.Max(0.01f, len);
-        beam.localScale = s;
+        beam.localScale = new Vector3(width, Mathf.Max(0.01f, len), width);
     }
 
-    public static IEnumerator FireLaser(Vector3 from, Vector3 to, Color color, float life)
+    public static IEnumerator FireLaser(
+        Vector3 from,
+        Vector3 to,
+        Color color,
+        float life,
+        StrikeImpactKind kind = StrikeImpactKind.Generic)
     {
-        var beam = Prim(PrimitiveType.Cylinder, "Laser", from, Vector3.one, color, 3f);
-        AlignBeam(beam.transform, from, to);
+        float scale = LaserVfxSpawner.FleetBeamScale(kind);
+        var prefab = LaserVfxSpawner.ForFleetStrike(kind, impact: false);
+        var beam = LaserVfxSpawner.SpawnBeam(prefab, from, to, scale, life);
+        if (beam != null)
+        {
+            var impactPrefab = LaserVfxSpawner.ForFleetStrike(kind, impact: true);
+            Vector3 hitNormal = (from - to).normalized;
+            if (hitNormal.sqrMagnitude < 1e-6f)
+                hitNormal = Vector3.up;
+            LaserVfxSpawner.SpawnImpact(
+                impactPrefab, to, hitNormal, LaserVfxSpawner.FleetImpactScale(kind), Mathf.Clamp(life, 0.14f, 0.55f));
+            yield return new WaitForSecondsRealtime(life);
+            yield break;
+        }
+
+        beam = Prim(PrimitiveType.Cylinder, "Laser", from, Vector3.one, color, 3f);
+        AlignBeam(beam.transform, from, to, width: 0.035f);
         float t = 0f;
         while (t < life && beam != null)
         {
             t += Time.deltaTime;
-            AlignBeam(beam.transform, from, to);
+            AlignBeam(beam.transform, from, to, width: 0.035f);
             float a = 1f - t / life;
             var r = beam.GetComponent<Renderer>();
             if (r != null && r.material != null)
@@ -211,44 +287,135 @@ public class SpacecraftFleetSystem : MonoBehaviour
             }
             yield return null;
         }
+
         if (beam != null)
             Object.Destroy(beam);
+    }
+
+    /// <summary>날아가는 레이저 탄 — 배틀쉽 UFO 격추용.</summary>
+    public static IEnumerator FireBoltLaser(
+        Vector3 from,
+        Vector3 to,
+        Color color,
+        StrikeImpactKind kind = StrikeImpactKind.BattleshipBeam)
+    {
+        Vector3 delta = to - from;
+        float dist = delta.magnitude;
+        if (dist < 0.01f)
+            yield break;
+
+        Vector3 dir = delta / dist;
+        float boltLength = Mathf.Clamp(dist * 0.14f, 0.1f, 0.65f);
+        float speed = Mathf.Clamp(dist * 3.5f, 10f, 55f);
+        float headDist = 0f;
+
+        var prefab = LaserVfxSpawner.ForFleetStrike(kind, impact: false);
+        float scale = LaserVfxSpawner.FleetBeamScale(kind);
+        GameObject vfxBolt = null;
+        GameObject primBolt = null;
+
+        while (headDist < dist)
+        {
+            headDist += speed * Time.deltaTime;
+            float head = Mathf.Min(headDist, dist);
+            float tail = Mathf.Max(0f, head - boltLength);
+            Vector3 headPos = from + dir * head;
+            Vector3 tailPos = from + dir * tail;
+
+            if (prefab != null)
+            {
+                if (vfxBolt == null)
+                    vfxBolt = LaserVfxSpawner.SpawnBeam(prefab, tailPos, headPos, scale, lifetime: -1f);
+                else
+                    LaserVfxSpawner.AimBeam(vfxBolt.transform, tailPos, headPos, scale);
+            }
+            else
+            {
+                if (primBolt == null)
+                {
+                    primBolt = Prim(PrimitiveType.Cylinder, "BoltLaser", tailPos, Vector3.one, color, 4f);
+                    Object.Destroy(primBolt.GetComponent<Collider>());
+                }
+
+                AlignBeam(primBolt.transform, tailPos, headPos, width: 0.02f);
+            }
+
+            yield return null;
+        }
+
+        if (vfxBolt != null)
+            Object.Destroy(vfxBolt);
+        if (primBolt != null)
+            Object.Destroy(primBolt);
+
+        var impactPrefab = LaserVfxSpawner.ForFleetStrike(kind, impact: true);
+        Vector3 hitNormal = (from - to).normalized;
+        if (hitNormal.sqrMagnitude < 1e-6f)
+            hitNormal = Vector3.up;
+        LaserVfxSpawner.SpawnImpact(impactPrefab, to, hitNormal, LaserVfxSpawner.FleetImpactScale(kind), 0.24f);
+    }
+
+    static GameObject MakeUfoTractorBeam(Vector3 pos, float earthRadius)
+    {
+        if (sharedTractorBeamMat == null)
+            sharedTractorBeamMat = RuntimeMaterial.UnlitTransparent(new Color(0.38f, 0.95f, 0.58f, 0.2f));
+
+        var beam = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
+        beam.name = "TractorBeam";
+        Object.Destroy(beam.GetComponent<Collider>());
+        var rend = beam.GetComponent<Renderer>();
+        rend.sharedMaterial = sharedTractorBeamMat;
+        rend.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+        beam.transform.position = pos;
+        beam.transform.localScale = new Vector3(0.022f, earthRadius * 0.16f, 0.022f);
+        return beam;
     }
 
     void SummonUfo()
     {
         Vector3 dir = FaceDir();
         Vector3 pos = OrbitPos(dir, 1.55f);
-        var ufo = Prim(PrimitiveType.Sphere, "UFO", pos, new Vector3(0.55f, 0.12f, 0.55f),
-            new Color(0.75f, 0.85f, 0.95f), 1.2f);
-        var dome = Prim(PrimitiveType.Sphere, "Dome", pos + Vector3.up * 0.06f,
-            new Vector3(0.28f, 0.18f, 0.28f), new Color(0.4f, 1f, 0.7f), 2f);
-        dome.transform.SetParent(ufo.transform, true);
 
-        var beam = Prim(PrimitiveType.Cylinder, "Beam", pos,
-            new Vector3(0.08f, earth.Radius * 0.35f, 0.08f), new Color(0.3f, 1f, 0.5f, 1f), 2.5f);
+        GameObject ufo = FleetShipModels.SpawnUfo(pos, dir, earth.Radius);
+        if (ufo == null)
+        {
+            ufo = Prim(PrimitiveType.Sphere, "UFO", pos, new Vector3(0.55f, 0.12f, 0.55f),
+                new Color(0.75f, 0.85f, 0.95f), 1.2f);
+            var dome = Prim(PrimitiveType.Sphere, "Dome", pos + Vector3.up * 0.06f,
+                new Vector3(0.28f, 0.18f, 0.28f), new Color(0.4f, 1f, 0.7f), 2f);
+            dome.transform.SetParent(ufo.transform, true);
+        }
+
+        var beam = MakeUfoTractorBeam(pos, earth.Radius);
         beam.transform.SetParent(ufo.transform, true);
+        Transform beamTf = beam.transform;
 
-        var ctrl = ufo.AddComponent<FleetUfo>();
-        ctrl.Init(earth, dir, beam.transform);
+        var ctrl = ufo.GetComponent<FleetUfo>();
+        if (ctrl == null)
+            ctrl = ufo.AddComponent<FleetUfo>();
+        ctrl.Init(earth, dir, beamTf);
     }
 
     void SummonBattleship()
     {
         Vector3 dir = FaceDir();
         Vector3 pos = OrbitPos(dir, 1.85f);
-        var ship = Prim(PrimitiveType.Cube, "Battleship", pos, new Vector3(1.4f, 0.28f, 0.45f),
-            new Color(0.25f, 0.28f, 0.32f), 0.2f);
-        Vector3 tangent = Vector3.Cross(dir, Vector3.up);
-        if (tangent.sqrMagnitude < 1e-4f)
-            tangent = Vector3.Cross(dir, Vector3.right);
-        ship.transform.rotation = Quaternion.LookRotation(tangent.normalized, dir);
+        var rot = FleetShipModels.BuildOrbitRotation(pos, earth.transform.position);
 
-        var bridge = Prim(PrimitiveType.Cube, "Bridge", pos + dir * 0.12f,
-            new Vector3(0.35f, 0.18f, 0.22f), new Color(0.4f, 0.45f, 0.5f), 0.5f);
-        bridge.transform.SetParent(ship.transform, true);
+        GameObject ship = FleetShipModels.SpawnBattleship(pos, rot, earth.Radius);
+        if (ship == null)
+        {
+            ship = Prim(PrimitiveType.Cube, "Battleship", pos, new Vector3(1.4f, 0.28f, 0.45f),
+                new Color(0.25f, 0.28f, 0.32f), 0.2f);
+            ship.transform.rotation = rot;
+            var bridge = Prim(PrimitiveType.Cube, "Bridge", pos + dir * 0.12f,
+                new Vector3(0.35f, 0.18f, 0.22f), new Color(0.4f, 0.45f, 0.5f), 0.5f);
+            bridge.transform.SetParent(ship.transform, true);
+        }
 
-        var ctrl = ship.AddComponent<FleetBattleship>();
+        var ctrl = ship.GetComponent<FleetBattleship>();
+        if (ctrl == null)
+            ctrl = ship.AddComponent<FleetBattleship>();
         ctrl.Init(earth, pos, dir);
     }
 
@@ -256,9 +423,14 @@ public class SpacecraftFleetSystem : MonoBehaviour
     {
         Vector3 dir = FaceDir();
         Vector3 pos = OrbitPos(dir, 1.7f, 0.2f);
-        var gun = Prim(PrimitiveType.Cylinder, "OrbitalCannon", pos, new Vector3(0.12f, 0.7f, 0.12f),
-            new Color(0.35f, 0.38f, 0.42f), 0.3f);
-        gun.transform.rotation = Quaternion.LookRotation(earth.transform.position - pos) * Quaternion.Euler(90f, 0f, 0f);
+        var rot = FleetShipModels.BuildOrbitRotation(pos, earth.transform.position);
+        var gun = FleetShipModels.SpawnOrbitalCannon(pos, rot, earth.Radius);
+        if (gun == null)
+        {
+            gun = Prim(PrimitiveType.Cylinder, "OrbitalCannon", pos, new Vector3(0.12f, 0.7f, 0.12f),
+                new Color(0.35f, 0.38f, 0.42f), 0.3f);
+            gun.transform.rotation = Quaternion.LookRotation(earth.transform.position - pos) * Quaternion.Euler(90f, 0f, 0f);
+        }
 
         float life = 8f;
         float t = 0f;
@@ -267,15 +439,17 @@ public class SpacecraftFleetSystem : MonoBehaviour
         {
             t += Time.deltaTime;
             gun.transform.RotateAround(earth.transform.position, Vector3.up, 12f * Time.deltaTime);
-            Vector3 aim = earth.transform.position - gun.transform.position;
-            gun.transform.rotation = Quaternion.LookRotation(aim) * Quaternion.Euler(90f, 0f, 0f);
+            gun.transform.rotation = FleetShipModels.BuildOrbitRotation(
+                gun.transform.position, earth.transform.position);
 
+            Vector3 aim = earth.transform.position - gun.transform.position;
             if (t >= nextShot)
             {
                 nextShot = t + 1.1f;
                 Vector3 hit = earth.transform.position - aim.normalized * earth.Radius;
-                StartCoroutine(FireLaser(gun.transform.position, hit, new Color(1f, 0.25f, 0.1f), 0.35f));
-                NuclearBlast.Play(earth, hit, -aim.normalized, 0.7f);
+                StartCoroutine(FireLaser(
+                    gun.transform.position, hit, new Color(1f, 0.25f, 0.1f), 0.35f, StrikeImpactKind.OrbitalCannon));
+                StrikeImpactFx.Play(earth, hit, -aim.normalized, 0.2f, StrikeImpactKind.OrbitalCannon);
             }
             yield return null;
         }
@@ -310,9 +484,19 @@ public class SpacecraftFleetSystem : MonoBehaviour
         for (int i = 0; i < fighters.Length; i++)
         {
             Vector3 offset = wingAxis * (lane[i] * R * 0.12f);
-            var f = Prim(PrimitiveType.Cube, "Fighter", start + offset, new Vector3(0.11f, 0.04f, 0.22f),
-                new Color(0.9f, 0.55f, 0.2f), 0.9f);
-            f.transform.SetParent(root.transform, true);
+            Vector3 spawnPos = start + offset;
+            var spawnRot = FleetShipModels.BuildFlightRotation(spawnPos, center, flyDir, -8f, lane[i] * 8f);
+            var f = FleetShipModels.SpawnFighter(spawnPos, spawnRot, R, i);
+            if (f == null)
+            {
+                f = Prim(PrimitiveType.Cube, "Fighter", start + offset, new Vector3(0.11f, 0.04f, 0.22f),
+                    new Color(0.9f, 0.55f, 0.2f), 0.9f);
+            }
+            else
+            {
+                f.transform.SetParent(root.transform, true);
+            }
+
             fighters[i] = f.transform;
         }
 
@@ -364,7 +548,8 @@ public class SpacecraftFleetSystem : MonoBehaviour
                 // 다이브 때는 코를 아래로, 상승 때는 위로
                 float pitch = u < 0.55f ? -12f : Mathf.Lerp(-4f, 18f, (u - 0.55f) / 0.45f);
                 fighters[i].position = pos;
-                fighters[i].rotation = Quaternion.LookRotation(look, radial) * Quaternion.Euler(pitch, 0f, lane[i] * 8f);
+                fighters[i].rotation = FleetShipModels.BuildFlightRotation(
+                    pos, center, look, pitch, lane[i] * 8f);
             }
 
             // 초저공 구간에서 벌처럼 연사
@@ -388,41 +573,79 @@ public class SpacecraftFleetSystem : MonoBehaviour
             int idx = Random.Range(0, wingRoot.childCount);
             from = wingRoot.GetChild(idx).position;
         }
-        StartCoroutine(FireLaser(from, hit, new Color(1f, 0.55f, 0.15f), 0.22f));
-        NuclearBlast.Play(earth, hit, normal, power);
+        StartCoroutine(FireLaser(from, hit, new Color(1f, 0.55f, 0.15f), 0.22f, StrikeImpactKind.FighterStrafe));
+        StrikeImpactFx.Play(earth, hit, normal, Mathf.Lerp(0.14f, 0.24f, power), StrikeImpactKind.FighterStrafe);
         EarthCraterDeform.Ensure(earth)?.Dig(hit, 0.07f, 0.035f, false);
-        EarthSurfaceScorch.Ensure(earth)?.BurnAt(hit, 0.025f, 0.65f);
     }
 
     IEnumerator SummonPlanetKiller()
     {
         Vector3 dir = FaceDir();
         Vector3 pos = OrbitPos(dir, 2.4f);
-        var ship = Prim(PrimitiveType.Cube, "PlanetKiller", pos, new Vector3(2.2f, 0.5f, 0.7f),
-            new Color(0.15f, 0.05f, 0.05f), 0.6f);
-        var muzzle = Prim(PrimitiveType.Sphere, "Muzzle", pos - dir * 0.6f,
-            Vector3.one * 0.35f, new Color(1f, 0.2f, 0.05f), 3f);
-        muzzle.transform.SetParent(ship.transform, true);
+        var rot = FleetShipModels.BuildOrbitRotation(pos, earth.transform.position);
+        var ship = FleetShipModels.SpawnPlanetKiller(pos, rot, earth.Radius);
+        Transform muzzle;
+        if (ship == null)
+        {
+            ship = Prim(PrimitiveType.Cube, "PlanetKiller", pos, new Vector3(2.2f, 0.5f, 0.7f),
+                new Color(0.15f, 0.05f, 0.05f), 0.6f);
+            var muzzleGo = Prim(PrimitiveType.Sphere, "Muzzle", pos - dir * 0.6f,
+                Vector3.one * 0.35f, new Color(1f, 0.2f, 0.05f), 3f);
+            muzzleGo.transform.SetParent(ship.transform, true);
+            muzzle = muzzleGo.transform;
+        }
+        else
+        {
+            var muzzleGo = Prim(PrimitiveType.Sphere, "Muzzle", Vector3.zero,
+                Vector3.one * 0.35f, new Color(1f, 0.2f, 0.05f), 3f);
+            muzzleGo.transform.SetParent(ship.transform, false);
+            muzzleGo.transform.localPosition = Vector3.forward * 0.42f;
+            muzzle = muzzleGo.transform;
+        }
 
         float charge = 2.2f;
         float t = 0f;
+        Vector3 earthCenter = earth.transform.position;
+        Vector3 hitPreview = earthCenter + dir * earth.Radius;
+        GameObject chargeBeam = null;
+        float chargeScale = LaserVfxSpawner.FleetBeamScale(StrikeImpactKind.PlanetKiller);
+        if (LaserVfxSpawner.HasCatalog)
+        {
+            var chargePrefab = LaserVfxSpawner.ForFleetStrike(StrikeImpactKind.PlanetKiller, impact: false);
+            chargeBeam = LaserVfxSpawner.SpawnBeam(
+                chargePrefab, muzzle.position, hitPreview, chargeScale * 0.55f, lifetime: -1f);
+        }
+
         while (t < charge && ship != null)
         {
             t += Time.deltaTime;
             float pulse = 0.35f + 0.15f * Mathf.Sin(t * 12f);
             muzzle.transform.localScale = Vector3.one * pulse;
+            ship.transform.rotation = FleetShipModels.BuildOrbitRotation(
+                ship.transform.position, earthCenter);
+            hitPreview = earthCenter + (ship.transform.position - earthCenter).normalized * earth.Radius;
+            if (chargeBeam != null)
+            {
+                float grow = Mathf.Lerp(0.55f, 1f, t / charge);
+                LaserVfxSpawner.AimBeam(chargeBeam.transform, muzzle.position, hitPreview, chargeScale * grow);
+            }
             yield return null;
         }
+
+        if (chargeBeam != null)
+            Object.Destroy(chargeBeam);
 
         if (ship == null)
             yield break;
 
         Vector3 hitDir = (ship.transform.position - earth.transform.position).normalized;
         Vector3 hit = earth.transform.position + hitDir * earth.Radius;
-        StartCoroutine(FireLaser(muzzle.transform.position, hit, new Color(1f, 0.15f, 0.05f), 1.2f));
-        NuclearBlast.Play(earth, hit, hitDir, 2.2f);
+        StartCoroutine(FireLaser(
+            muzzle.transform.position, hit, new Color(1f, 0.15f, 0.05f), 1.2f, StrikeImpactKind.PlanetKiller));
+        StrikeImpactFx.Play(earth, hit, hitDir, 0.46f, StrikeImpactKind.PlanetKiller);
+        NuclearBlast.Play(earth, hit, hitDir, 1.45f);
         EarthCraterDeform.Ensure(earth)?.Dig(hit, 0.22f, 0.1f, true);
-        CameraShake.Shake(0.25f, 0.45f);
+        CameraShake.Shake(0.14f, 0.22f);
 
         yield return new WaitForSecondsRealtime(2.5f);
         if (ship != null)
@@ -438,8 +661,15 @@ public class SpacecraftFleetSystem : MonoBehaviour
         for (int i = 0; i < n; i++)
         {
             Vector3 d = (dir + Random.insideUnitSphere * 0.7f).normalized;
-            var p = Prim(PrimitiveType.Sphere, "Probe", OrbitPos(d, 1.25f + Random.Range(0f, 0.2f)),
-                Vector3.one * Random.Range(0.06f, 0.12f), new Color(0.7f, 0.9f, 1f), 1.5f);
+            Vector3 probePos = OrbitPos(d, 1.25f + Random.Range(0f, 0.2f));
+            var rot = FleetShipModels.BuildOrbitRotation(probePos, earth.transform.position);
+            var p = FleetShipModels.SpawnProbe(probePos, rot, earth.Radius);
+            if (p == null)
+            {
+                p = Prim(PrimitiveType.Sphere, "Probe", probePos,
+                    Vector3.one * Random.Range(0.06f, 0.12f), new Color(0.7f, 0.9f, 1f), 1.5f);
+            }
+
             p.transform.SetParent(root.transform, true);
             probes[i] = p.transform;
         }
@@ -455,7 +685,8 @@ public class SpacecraftFleetSystem : MonoBehaviour
                     continue;
                 Vector3 toEarth = (earth.transform.position - probes[i].position).normalized;
                 probes[i].position += toEarth * (0.35f * Time.deltaTime);
-                probes[i].Rotate(Vector3.up, 180f * Time.deltaTime, Space.Self);
+                probes[i].rotation = FleetShipModels.BuildOrbitRotation(
+                    probes[i].position, earth.transform.position);
             }
 
             if (Time.frameCount % 10 == 0)
@@ -463,6 +694,28 @@ public class SpacecraftFleetSystem : MonoBehaviour
                 Vector3 hitDir = (FaceDir() + Random.insideUnitSphere * 0.5f).normalized;
                 Vector3 hit = earth.transform.position + hitDir * earth.Radius;
                 EarthCraterDeform.Ensure(earth)?.Dig(hit, 0.08f, 0.045f, false);
+                if (Time.frameCount % 30 == 0)
+                {
+                    StrikeImpactFx.Play(earth, hit, -hitDir, 0.17f, StrikeImpactKind.VonNeumannProbe);
+                    if (probes.Length > 0 && probes[0] != null)
+                    {
+                        StartCoroutine(FireLaser(
+                            probes[0].position,
+                            hit,
+                            new Color(0.55f, 0.85f, 1f),
+                            0.16f,
+                            StrikeImpactKind.VonNeumannProbe));
+                    }
+                }
+                if (Time.frameCount % 45 == 0)
+                {
+                    PopulationCasualtySystem.ApplyAt(
+                        earth,
+                        hit,
+                        PopulationCasualtySystem.DigNormToDegrees(0.08f),
+                        0.07f,
+                        0.5f);
+                }
             }
             yield return null;
         }
@@ -472,7 +725,7 @@ public class SpacecraftFleetSystem : MonoBehaviour
     }
 }
 
-/// <summary>장시간 체공. UFO 우선 공격, 없으면 지구에 핵급 임팩트.</summary>
+/// <summary>장시간 체공. UFO가 있을 때만 격추 — 지구 지킴이.</summary>
 public class FleetBattleship : MonoBehaviour
 {
     EarthPlanet earth;
@@ -489,11 +742,7 @@ public class FleetBattleship : MonoBehaviour
         holdPos = pos;
         holdDir = dir.normalized;
         transform.position = holdPos;
-
-        Vector3 tangent = Vector3.Cross(holdDir, Vector3.up);
-        if (tangent.sqrMagnitude < 1e-4f)
-            tangent = Vector3.Cross(holdDir, Vector3.right);
-        transform.rotation = Quaternion.LookRotation(tangent.normalized, holdDir);
+        transform.rotation = FleetShipModels.BuildOrbitRotation(holdPos, earth.transform.position);
 
         SpacecraftFleetSystem.RegisterBattleship(this);
     }
@@ -518,54 +767,33 @@ public class FleetBattleship : MonoBehaviour
             return;
         }
 
-        // 소환 지점에 고정 — 왓다갓다 이동 없음
+        // 소환 지점에 고정 — 지구를 향해 수평 유지
         transform.position = holdPos;
 
-        Vector3 tangent = Vector3.Cross(holdDir, Vector3.up);
-        if (tangent.sqrMagnitude < 1e-4f)
-            tangent = Vector3.Cross(holdDir, Vector3.right);
-        tangent.Normalize();
-        Quaternion park = Quaternion.LookRotation(tangent, holdDir);
-
+        Vector3 earthCenter = earth.transform.position;
+        Quaternion faceEarth = FleetShipModels.BuildOrbitRotation(holdPos, earthCenter);
         FleetUfo ufo = SpacecraftFleetSystem.FindNearestUfo(holdPos);
-        Vector3 aimPoint;
-        if (ufo != null)
-            aimPoint = ufo.transform.position;
-        else
-            aimPoint = earth.transform.position + holdDir * earth.Radius;
 
-        // 선체는 거의 정자세 유지, 조준만 아주 살짝
-        Vector3 flatAim = Vector3.ProjectOnPlane(aimPoint - holdPos, holdDir);
-        if (flatAim.sqrMagnitude > 1e-4f)
+        if (ufo == null)
         {
-            Quaternion aimRot = Quaternion.LookRotation(flatAim.normalized, holdDir);
-            Quaternion want = Quaternion.Slerp(park, aimRot, 0.28f);
-            transform.rotation = Quaternion.Slerp(transform.rotation, want, Time.deltaTime * 1.2f);
+            transform.rotation = Quaternion.Slerp(transform.rotation, faceEarth, Time.deltaTime * 2f);
+            return;
         }
-        else
-        {
-            transform.rotation = Quaternion.Slerp(transform.rotation, park, Time.deltaTime * 1.2f);
-        }
+
+        Vector3 aimPoint = ufo.transform.position;
+        Quaternion want = FleetShipModels.BuildOrbitRotation(holdPos, earthCenter, aimPoint);
+        transform.rotation = Quaternion.Slerp(transform.rotation, want, Time.deltaTime * 3f);
 
         if (age < nextShot)
             return;
-        nextShot = age + shotInterval;
 
-        StartCoroutine(SpacecraftFleetSystem.FireLaser(
-            transform.position, aimPoint, new Color(1f, 0.75f, 0.15f), 0.35f));
+        int ufoCount = SpacecraftFleetSystem.LiveUfoCount;
+        float interval = ufoCount > 6 ? 2.8f : ufoCount > 3 ? 2.1f : shotInterval;
+        nextShot = age + interval;
 
-        if (ufo != null)
-        {
-            ufo.TakeHit(1f, transform.position);
-        }
-        else
-        {
-            Vector3 hitDir = holdDir;
-            NuclearBlast.Play(earth, aimPoint, hitDir, 1.25f);
-            EarthCraterDeform.Ensure(earth)?.Dig(aimPoint, 0.12f, 0.07f, false);
-            EarthSurfaceScorch.Ensure(earth)?.BurnAt(aimPoint, 0.04f, 0.8f);
-            CameraShake.Shake(0.1f, 0.18f);
-        }
+        StartCoroutine(SpacecraftFleetSystem.FireBoltLaser(
+            transform.position, aimPoint, new Color(1f, 0.82f, 0.2f), StrikeImpactKind.BattleshipBeam));
+        ufo.TakeHit(1f, transform.position);
     }
 }
 
@@ -598,21 +826,15 @@ public class FleetUfo : MonoBehaviour
     public void TakeHit(float damage, Vector3 from)
     {
         hp -= damage;
-        // 피격 플래시
-        var rend = GetComponent<Renderer>();
-        if (rend != null)
-            rend.material = RuntimeMaterial.Opaque(new Color(1f, 0.4f, 0.3f), 2f);
-
         if (hp > 0f)
             return;
 
-        // 격추 폭발
         if (earth != null)
         {
             Vector3 n = (transform.position - earth.transform.position).normalized;
-            NuclearBlast.Play(earth, transform.position, n, 0.6f);
+            StrikeImpactFx.Play(earth, transform.position, n, 0.18f, StrikeImpactKind.UfoPop);
         }
-        CameraShake.Shake(0.12f, 0.2f);
+        CameraShake.Shake(0.025f, 0.05f);
         Destroy(gameObject);
     }
 
@@ -632,14 +854,21 @@ public class FleetUfo : MonoBehaviour
         }
 
         transform.RotateAround(earth.transform.position, orbitAxis, 22f * Time.deltaTime);
-        if (beam != null)
-            SpacecraftFleetSystem.AlignBeam(beam, transform.position, earth.transform.position);
 
-        if (Time.frameCount % 14 == 0)
+        int phase = Time.frameCount + GetInstanceID();
+        if ((phase & 1) == 0)
+        {
+            transform.rotation = FleetShipModels.BuildOrbitRotation(
+                transform.position, earth.transform.position);
+            if (beam != null)
+                SpacecraftFleetSystem.AlignBeam(beam, transform.position, earth.transform.position, 0.022f);
+        }
+
+        if ((phase % 96) == 0 && SpacecraftFleetSystem.TryConsumeUfoGroundFx())
         {
             Vector3 hit = earth.transform.position +
                 (transform.position - earth.transform.position).normalized * earth.Radius;
-            EarthCraterDeform.Ensure(earth)?.Dig(hit, 0.05f, 0.018f, false);
+            EarthSurfaceScorch.Ensure(earth)?.BurnAt(hit, 0.012f, 0.32f);
         }
     }
 }

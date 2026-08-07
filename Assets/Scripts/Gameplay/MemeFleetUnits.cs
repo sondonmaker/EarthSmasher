@@ -297,9 +297,9 @@ public class MemePepeUnit : MemeUnitBase
         Vector3 hit = SurfacePoint();
         Vector3 n = AimDirWorld();
         EarthCraterDeform.Ensure(earth)?.DrillBore(hit, 0.26f, 0.28f, 0.18f);
-        CameraShake.Shake(0.28f, 0.2f);
+        CameraShake.Shake(0.12f, 0.09f);
         MemeCaption.Spawn(hit + n * (earth.Radius * 0.16f), "feels good man", new Color(0.55f, 1f, 0.45f), earth.Radius * 0.11f);
-        MemeAttackSystem.ApplyCasualtiesStatic(0.0011f);
+        MemeAttackSystem.ApplyCasualtiesAt(earth, hit, 0.05f, 0.45f, 0.95f);
         RegisterAttack();
 
         moveFrom = transform.position;
@@ -402,8 +402,8 @@ public class MemeCatUnit : MemeUnitBase
         float rakeSpread = R * (0.055f + digRadius * 0.4f);
         MemeVisuals.SpawnClawRake(hit, n, slashDir, rakeLen, rakeSpread, R * 0.006f);
 
-        if (attackCount % 4 == 0)
-            MemeAttackSystem.ApplyCasualtiesStatic(0.00035f);
+        if (attackCount % 2 == 0)
+            MemeAttackSystem.ApplyCasualtiesAt(earth, SurfacePoint(), 0.055f, 0.52f, 1.05f);
         RegisterAttack();
     }
 }
@@ -476,16 +476,15 @@ public class MemeSharkUnit : MemeUnitBase
         hit += tangent * (sideSign * R * 0.038f);
         sideSign *= -1f;
 
-        float power = 0.62f + (attackCount % 4) * 0.12f;
-        NuclearBlast.Play(earth, hit, n, power);
-        MemeAttackSystem.SpawnFlash(hit, n, R * 0.06f, new Color(1f, 0.5f, 0.15f, 0.62f));
-        ImpactShockwave.Spawn(hit, n, R * (0.32f + (attackCount % 3) * 0.08f));
+        float power = 0.38f + (attackCount % 4) * 0.06f;
+        StrikeImpactFx.Play(earth, hit, n, power, StrikeImpactKind.MemeStomp);
+        MemeAttackSystem.SpawnFlash(hit, n, R * 0.035f, new Color(1f, 0.5f, 0.15f, 0.45f));
         EarthSurfaceScorch.Ensure(earth)?.PaintSneakerPrint(hit, 0.05f);
 
         if (attackCount % 2 == 0)
             MemeAttackSystem.LightHit(earth, hit, n, 0.042f, 0.018f, 0.03f, 0.5f);
 
-        CameraShake.Shake(0.11f + (attackCount % 5) * 0.025f, 0.09f);
+        CameraShake.Shake(0.045f + (attackCount % 5) * 0.01f, 0.045f);
 
         if (attackCount % 4 == 0)
         {
@@ -500,7 +499,7 @@ public class MemeSharkUnit : MemeUnitBase
             MemeCaption.Spawn(hit + n * (R * 0.12f), "SPLAT", new Color(0.35f, 0.75f, 1f), R * 0.085f);
         }
 
-        MemeAttackSystem.ApplyCasualtiesStatic(0.0006f);
+        MemeAttackSystem.ApplyCasualtiesAt(earth, SurfacePoint(), 0.04f, 0.38f, 0.9f);
         RegisterAttack();
     }
 
@@ -598,7 +597,7 @@ public class MemeMilkBomb : MonoBehaviour
             Vector3 n = earth.transform.TransformDirection(localAim).normalized;
             MemeAttackSystem.LightHit(earth, target, n, 0.05f, 0.022f, 0.025f, 0.42f);
             CameraShake.Shake(0.1f, 0.08f);
-            MemeAttackSystem.ApplyCasualtiesStatic(0.0008f);
+            MemeAttackSystem.ApplyCasualtiesAt(earth, target, 0.035f, 0.32f, 0.85f);
             onDone = null;
             Destroy(gameObject);
         }

@@ -41,7 +41,8 @@ public class MeteorLauncher : MonoBehaviour
     void Update()
     {
         if (earth == null) return;
-        if (EarthLayerToolbar.BlocksGameplayInput || ZoomUiBlocker.BlocksGameplay || WorldStatusHud.BlocksGameplay) return;
+        if (EarthLayerToolbar.BlocksGameplayInput || EarthSettingsPanel.BlocksGameplayInput
+            || ZoomUiBlocker.BlocksGameplay || WorldStatusHud.BlocksGameplay) return;
         if (WeaponRailPanel.BlocksGameplay) return;
         if (DisasterUiGate.ModalOpen) return;
         if (WeaponRailPanel.IsArmed) return;
@@ -102,10 +103,10 @@ public class MeteorLauncher : MonoBehaviour
     {
         var go = GameObject.CreatePrimitive(PrimitiveType.Sphere);
         go.name = "Meteor";
-        // 울퉁불퉁한 암석 느낌
         go.transform.localScale = new Vector3(0.38f, 0.32f, 0.42f);
         var rend = go.GetComponent<Renderer>();
         rend.material = RuntimeMaterial.Opaque(new Color(0.28f, 0.22f, 0.18f), 0.15f);
+        rend.enabled = true;
         Destroy(go.GetComponent<Collider>());
         go.AddComponent<MeteorTrail>();
         return go.AddComponent<MeteorProjectile>();

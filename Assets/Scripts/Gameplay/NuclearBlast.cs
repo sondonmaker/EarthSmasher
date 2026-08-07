@@ -8,16 +8,25 @@ public class NuclearBlast : MonoBehaviour
 {
     public static void Play(EarthPlanet earth, Vector3 worldPoint, Vector3 normal, float power = 1f)
     {
-        power = Mathf.Clamp(power, 0.4f, 2.2f);
-        SpawnFlash(worldPoint, normal, power);
-        SpawnFireball(worldPoint, normal, power);
-        CameraShake.Shake(0.1f * power, 0.18f * power);
+        power = Mathf.Clamp(power, 0.35f, 1.65f);
+        bool usedPack = ProFxParticleSpawner.TryNuclearExplosion(worldPoint, normal, power);
+        SpawnFlash(worldPoint, normal, power * 0.65f);
+        if (!usedPack)
+            SpawnFireball(worldPoint, normal, power * 0.55f);
+        CameraShake.Shake(0.045f * power, 0.08f * power);
 
         if (earth != null)
         {
             var scorch = EarthSurfaceScorch.Ensure(earth);
             if (scorch != null)
                 scorch.BurnAt(worldPoint, 0.028f * power, 0.78f);
+
+            PopulationCasualtySystem.ApplyAt(
+                earth,
+                worldPoint,
+                PopulationCasualtySystem.ScorchNormToDegrees(0.028f * power),
+                Mathf.Clamp01(0.55f + power * 0.18f),
+                power);
         }
     }
 

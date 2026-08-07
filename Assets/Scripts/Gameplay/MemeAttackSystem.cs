@@ -63,6 +63,26 @@ public class MemeAttackSystem : MonoBehaviour
 
     public void Configure(EarthPlanet planet) => earth = planet;
 
+    public void Abort()
+    {
+        StopAllCoroutines();
+        penguCo = null;
+        trumpCo = null;
+        trumpCrashCo = null;
+        trojanCo = null;
+        IsDogeRunning = false;
+        IsPenguRunning = false;
+        IsTrumpRunning = false;
+        IsTrumpCrashRunning = false;
+        IsTrojanRunning = false;
+        ActiveMoonRunCount = 0;
+        if (dogeGo != null)
+        {
+            Object.Destroy(dogeGo);
+            dogeGo = null;
+        }
+    }
+
     public bool TryFire(string memeId, Vector3 worldPoint, Vector3 worldNormal)
     {
         if (string.IsNullOrEmpty(memeId))
@@ -92,7 +112,7 @@ public class MemeAttackSystem : MonoBehaviour
                 penguCo = StartCoroutine(LaunchPenguCoin(localDir));
                 return true;
             case "trump_tariff":
-                if (IsAnyTrumpBusy || IsDogeRunning || IsMoonRunBusy || IsPenguRunning || IsTrojanRunning)
+                if (IsTrumpRunning || IsDogeRunning || IsMoonRunBusy || IsPenguRunning || IsTrojanRunning)
                     return false;
                 trumpCo = StartCoroutine(LaunchTrumpTariff(localDir));
                 return true;
@@ -150,6 +170,59 @@ public class MemeAttackSystem : MonoBehaviour
         EarthSurfaceScorch.Ensure(earth)?.BurnAt(hit, burnR, burnDark);
     }
 
+    /// <summary>밈 공격 큰 순간 — 스타일별 ProFX + 작은 충격파.</summary>
+    public static void MemeBurst(
+        Vector3 hit,
+        Vector3 normal,
+        float earthRadius,
+        float power,
+        MemeBurstStyle style,
+        bool shockwave = true)
+    {
+        float intensity = Mathf.Clamp(power * 0.48f, 0.32f, 0.92f);
+        if (!ProFxParticleSpawner.TryMemeBurst(style, hit, normal, earthRadius, intensity))
+            SpawnFlash(hit, normal, earthRadius * 0.045f, MemeBurstFlash(style));
+
+        if (shockwave)
+        {
+            float ring = style switch
+            {
+                MemeBurstStyle.TariffFinale => 0.2f,
+                MemeBurstStyle.MarketCrash => 0.18f,
+                MemeBurstStyle.ArrowSlam => 0.16f,
+                MemeBurstStyle.TrojanReveal => 0.17f,
+                MemeBurstStyle.DogeCoin => 0.14f,
+                _ => 0.15f
+            };
+            ImpactShockwave.Spawn(hit, normal, earthRadius * (ring + intensity * 0.08f));
+        }
+
+        CameraShake.Shake(MemeBurstShakeAmp(style, intensity), MemeBurstShakeDur(style, intensity));
+    }
+
+    static Color MemeBurstFlash(MemeBurstStyle style) => style switch
+    {
+        MemeBurstStyle.RocketLaunch => new Color(1f, 0.55f, 0.12f, 0.55f),
+        MemeBurstStyle.TariffFinale => new Color(1f, 0.38f, 0.08f, 0.52f),
+        MemeBurstStyle.MarketCrash => new Color(0.15f, 1f, 0.28f, 0.5f),
+        MemeBurstStyle.ArrowSlam => new Color(0.12f, 1f, 0.22f, 0.55f),
+        MemeBurstStyle.TrojanReveal => new Color(0.95f, 0.62f, 0.22f, 0.5f),
+        MemeBurstStyle.TariffBlast => new Color(1f, 0.45f, 0.1f, 0.48f),
+        MemeBurstStyle.DogeCoin => new Color(1f, 0.82f, 0.18f, 0.55f),
+        _ => new Color(1f, 0.6f, 0.15f, 0.5f)
+    };
+
+    static float MemeBurstShakeAmp(MemeBurstStyle style, float intensity) => style switch
+    {
+        MemeBurstStyle.TariffFinale => 0.07f + intensity * 0.045f,
+        MemeBurstStyle.MarketCrash => 0.065f + intensity * 0.04f,
+        MemeBurstStyle.TrojanReveal => 0.06f + intensity * 0.038f,
+        _ => 0.05f + intensity * 0.035f
+    };
+
+    static float MemeBurstShakeDur(MemeBurstStyle style, float intensity) =>
+        0.038f + intensity * 0.028f;
+
     /// <summary>거대 고양이 발톱 — 평행 홈 파기 + 텍스처 긁힘.</summary>
     public static void CatScratch(
         EarthPlanet earth, Vector3 hit, Vector3 normal, Vector3 scratchDir,
@@ -198,7 +271,7 @@ public class MemeAttackSystem : MonoBehaviour
         body.Launch(earth, hit, n, 9.5f, 4.5f, 22f, 1.6f, () =>
         {
             MemeCaption.Spawn(hit + n * (R * 0.32f), "much wow", new Color(1f, 0.88f, 0.32f), R * 0.18f);
-            ApplyCasualtiesStatic(0.008f);
+            ApplyCasualtiesAt(earth, hit, 0.09f, 0.88f, 1.15f);
             dogeGo = null;
             IsDogeRunning = false;
         });
@@ -234,13 +307,10 @@ public class MemeAttackSystem : MonoBehaviour
         }
 
         ride.transform.position = pad;
-        CinematicExplosion.Play(hit, n, 1.4f);
-        ImpactShockwave.Spawn(hit, n, R * 0.72f);
-        SpawnFlash(hit, n, R * 0.14f, new Color(1f, 0.58f, 0.1f, 0.75f));
-        SpawnFlash(hit + n * (R * 0.06f), n, R * 0.08f, new Color(1f, 0.82f, 0.35f, 0.55f));
+        MemeBurst(hit, n, R, 0.72f, MemeBurstStyle.RocketLaunch);
+        SpawnFlash(hit, n, R * 0.06f, new Color(1f, 0.58f, 0.1f, 0.55f));
         LightHit(earth, hit, n, 0.065f, 0.03f, 0.048f, 0.62f);
         EarthSurfaceScorch.Ensure(earth)?.BurnAt(hit, 0.05f, 0.68f);
-        CameraShake.Shake(0.52f, 0.42f);
         MemeCaption.Spawn(hit + n * (R * 0.34f), "BOOM!", new Color(1f, 0.28f, 0.05f), R * 0.2f);
 
         yield return new WaitForSeconds(0.12f);
@@ -276,7 +346,7 @@ public class MemeAttackSystem : MonoBehaviour
         }
 
         MemeCaption.Spawn(flyEnd + n * (R * 0.08f), "to the moon", new Color(1f, 0.92f, 0.35f), R * 0.15f);
-        ApplyCasualtiesStatic(0.0045f);
+        ApplyCasualtiesAt(earth, hit, 0.11f, 0.72f, 1.05f);
 
         float fade = 0.4f;
         float fadeT = 0f;
@@ -347,7 +417,7 @@ public class MemeAttackSystem : MonoBehaviour
         LightHit(earth, hit, n, 0.055f, 0.022f, 0.03f, 0.42f);
         CameraShake.Shake(0.14f, 0.11f);
         MemeCaption.Spawn(hit + n * (R * 0.18f), Random.value > 0.5f ? "pengu" : "waddle", new Color(0.75f, 0.92f, 1f), R * 0.11f);
-        ApplyCasualtiesStatic(0.0038f);
+        ApplyCasualtiesAt(earth, hit, 0.07f, 0.62f, 1f);
 
         float exit = 0.45f;
         float exitT = 0f;
@@ -375,30 +445,29 @@ public class MemeAttackSystem : MonoBehaviour
         Vector3 center = earth.transform.position;
         Vector3 oppN = DirectionWorld(-localDir);
         Vector3 oppHit = PointOnRay(-localDir, R);
+        EarthGeo.DirectionToLatLon(localDir, out float lat, out float lon);
 
-        const float trumpAltMul = 0.26f;
-        const float focusDur = 0.7f;
-        var orbitCam = Object.FindObjectOfType<OrbitCamera>();
-        if (orbitCam != null)
-        {
-            orbitCam.FocusOnSurfaceHit(hit, trumpAltMul, focusDur);
-            yield return new WaitForSeconds(focusDur);
-        }
+        const float trumpAlt = 0.28f;
+        Object.FindObjectOfType<OrbitCamera>()?.FocusOnSurfaceHit(hit, trumpAlt, 0.45f);
 
         var trump = MemeVisuals.CreateTrumpBillboard(R * 1.05f);
-        Vector3 trumpPos = hit + n * (R * trumpAltMul);
-        trump.transform.position = trumpPos;
+        PlaceTrumpTariffBillboard(trump, lat, lon, trumpAlt);
 
         MemeCaption.Spawn(hit + n * (R * 0.28f), "TARIFFS", new Color(1f, 0.72f, 0.15f), R * 0.14f);
-        yield return new WaitForSeconds(0.4f);
+        yield return new WaitForSeconds(0.55f);
 
         Vector3 tangent = Vector3.Cross(n, Vector3.up);
         if (tangent.sqrMagnitude < 1e-4f)
             tangent = Vector3.Cross(n, Vector3.right);
         tangent.Normalize();
 
-        for (int i = 0; i < 8; i++)
+        for (int i = 0; i < 6; i++)
         {
+            PlaceTrumpTariffBillboard(trump, lat, lon, trumpAlt);
+            hit = SurfaceFromLatLon(lat, lon);
+            center = earth.transform.position;
+            n = (hit - center).normalized;
+
             Vector3 jitter = (tangent * Random.Range(-0.15f, 0.15f) + Vector3.Cross(n, tangent) * Random.Range(-0.1f, 0.1f)) * R;
             Vector3 aimHit = hit + jitter;
             Vector3 aimN = (aimHit - center).normalized;
@@ -407,76 +476,73 @@ public class MemeAttackSystem : MonoBehaviour
             var coin = MemeVisuals.CreateTariffCoin(R * 0.28f);
             MemeVisuals.AddFireTrail(coin, R * 0.022f);
             var drop = coin.AddComponent<MemeSmallCoinDrop>();
-            drop.Launch(earth, impact, aimN, 12f + i * 0.4f, 2f + i * 0.12f, false, null);
-            yield return new WaitForSeconds(0.16f);
+            drop.Launch(earth, impact, aimN, 14f + i * 0.5f, 1.6f + i * 0.08f, false, null);
+            yield return new WaitForSeconds(0.11f);
         }
 
+        hit = SurfaceFromLatLon(lat, lon);
+        center = earth.transform.position;
+        n = (hit - center).normalized;
         MemeCaption.Spawn(hit + n * (R * 0.22f), "TRADE WAR", new Color(1f, 0.35f, 0.12f), R * 0.13f);
-        yield return new WaitForSeconds(0.3f);
+        yield return new WaitForSeconds(0.25f);
 
         var scorch = EarthSurfaceScorch.Ensure(earth);
-        const int firePoints = 28;
+        const int firePoints = 16;
         for (int i = 0; i < firePoints; i++)
         {
+            PlaceTrumpTariffBillboard(trump, lat, lon, trumpAlt);
+            hit = SurfaceFromLatLon(lat, lon);
+            center = earth.transform.position;
+            n = (hit - center).normalized;
+            oppHit = PointOnRay(-localDir, R);
+            oppN = (oppHit - center).normalized;
+
             float u = i / (float)(firePoints - 1);
             Vector3 dir = GlobalFireDirection(u, localDir);
             Vector3 worldBurn = center + earth.transform.TransformDirection(dir) * R;
-            Vector3 burnN = dir;
             float radius = Mathf.Lerp(0.042f, 0.075f, u);
             float dark = Mathf.Lerp(0.58f, 0.92f, u);
             scorch?.BurnAt(worldBurn, radius, dark);
-            SpawnFlash(worldBurn, earth.transform.TransformDirection(burnN), R * 0.07f, new Color(1f, 0.42f, 0.08f, 0.55f));
+            SpawnFlash(worldBurn, earth.transform.TransformDirection(dir), R * 0.07f, new Color(1f, 0.42f, 0.08f, 0.55f));
 
             if (i % 3 == 0)
                 earth.ApplyImpact(worldBurn, 6f + u * 8f);
-            if (i % 5 == 0)
-                CameraShake.Shake(0.1f + u * 0.08f, 0.07f + u * 0.05f);
-
-            trump.transform.position = Vector3.Lerp(trump.transform.position, hit + n * (R * 0.16f), 0.08f);
+            if (i % 4 == 0)
+                CameraShake.Shake(0.04f + u * 0.03f, 0.04f);
 
             if (i == firePoints / 2)
                 MemeCaption.Spawn(oppHit + oppN * (R * 0.18f), "SANCTIONS", new Color(1f, 0.5f, 0.15f), R * 0.11f);
 
-            if (i == 5 || i == 10 || i == 15 || i == 20 || i == 25)
+            if (i == 4 || i == 8 || i == 12)
             {
-                int slot = i / 5 - 1;
+                int slot = i / 4 - 1;
                 Vector3 blastLocal = GlobalTariffBlastLocalDir(slot, localDir);
                 Vector3 blastN = DirectionWorld(blastLocal);
                 Vector3 blastHit = center + blastN * R;
                 PlayTariffWorldBlast(scorch, blastHit, blastN, R, 0.92f + slot * 0.1f);
             }
 
-            yield return new WaitForSeconds(0.065f);
+            yield return new WaitForSeconds(0.055f);
         }
 
-        CinematicExplosion.Play(hit, n, 1.55f);
-        CinematicExplosion.Play(oppHit, oppN, 1.15f);
-        ImpactShockwave.Spawn(hit, n, R * 1.15f);
-        ImpactShockwave.Spawn(oppHit, oppN, R * 0.9f);
+        yield return FadeOutBillboard(trump, 0.28f);
+        trump = null;
+
+        hit = SurfaceFromLatLon(lat, lon);
+        center = earth.transform.position;
+        n = (hit - center).normalized;
+        oppHit = PointOnRay(-localDir, R);
+
+        MemeBurst(hit, n, R, 0.78f, MemeBurstStyle.TariffFinale);
         scorch?.PaintMoltenFissures(hit, 0.11f, 0.72f, 2.6f, 11);
         scorch?.PaintMoltenFissures(oppHit, 0.09f, 0.68f, 2.3f, 9);
         LightHit(earth, hit, n, 0.095f, 0.042f, 0.055f, 0.88f);
         earth.ApplyImpact(hit, 18f);
-        CameraShake.Shake(0.85f, 0.62f);
-
-        yield return CameraRollPulse(0.38f, 72f);
-
+        ApplyCasualtiesAt(earth, hit, 0.14f, 0.82f, 1.2f);
+        ApplyCasualtiesAt(earth, oppHit, 0.09f, 0.48f, 0.75f);
         MemeCaption.Spawn(hit + n * (R * 0.32f), "MAKE EARTH GREAT AGAIN", new Color(1f, 0.88f, 0.25f), R * 0.17f);
-        MemeCaption.Spawn(oppHit + oppN * (R * 0.2f), "TOTAL CHAOS", new Color(1f, 0.4f, 0.1f), R * 0.12f);
-        ApplyCasualtiesStatic(0.0065f);
+        CameraShake.Shake(0.1f, 0.12f);
 
-        float fade = 0.4f;
-        float fadeT = 0f;
-        Vector3 trumpScale = trump.transform.localScale;
-        while (fadeT < fade)
-        {
-            fadeT += Time.deltaTime;
-            float u = fadeT / fade;
-            trump.transform.localScale = trumpScale * (1f - u);
-            yield return null;
-        }
-
-        Object.Destroy(trump);
         IsTrumpRunning = false;
         trumpCo = null;
     }
@@ -502,24 +568,17 @@ public class MemeAttackSystem : MonoBehaviour
         Vector3 bitangent = Vector3.Cross(n, tangent).normalized;
 
         const float trumpAltMul = 0.26f;
-        const float focusDur = 0.65f;
         var orbitCam = Object.FindObjectOfType<OrbitCamera>();
-        if (orbitCam != null)
-        {
-            orbitCam.FocusOnSurfaceHit(hit, trumpAltMul, focusDur);
-            yield return new WaitForSeconds(focusDur);
-        }
+        orbitCam?.FocusOnSurfaceHit(hit, trumpAltMul, 0.35f);
 
         var trump = MemeVisuals.CreateTrumpMarketCrashBillboard(R * 1.05f);
         Vector3 trumpPos = hit + n * (R * trumpAltMul);
         trump.transform.position = trumpPos;
 
         MemeCaption.Spawn(hit + n * (R * 0.3f), "BREAKING NEWS", new Color(1f, 0.2f, 0.12f), R * 0.13f);
-        ImpactShockwave.Spawn(trumpPos, n, R * 0.42f);
-        CameraShake.Shake(0.16f, 0.12f);
+        ImpactShockwave.Spawn(trumpPos, n, R * 0.38f);
+        CameraShake.Shake(0.08f, 0.06f);
         yield return new WaitForSeconds(0.18f);
-        ImpactShockwave.Spawn(trumpPos, n, R * 0.58f);
-        yield return new WaitForSeconds(0.12f);
 
         for (int i = 0; i < 11; i++)
         {
@@ -537,6 +596,9 @@ public class MemeAttackSystem : MonoBehaviour
         yield return new WaitForSeconds(0.22f);
 
         yield return PaintHeatMapGrid(scorch, hit, center, tangent, bitangent, R);
+
+        yield return FadeOutBillboard(trump, 0.08f);
+        trump = null;
 
         for (int i = 0; i < 6; i++)
         {
@@ -557,41 +619,16 @@ public class MemeAttackSystem : MonoBehaviour
         yield return PanicRippleRings(scorch, hit, center, n, tangent, bitangent, R);
 
         MemeCaption.Spawn(hit + n * (R * 0.28f), "CIRCUIT BREAKER", new Color(1f, 0.85f, 0.15f), R * 0.15f);
-        ImpactShockwave.Spawn(hit, n, R * 1.0f);
-        CinematicExplosion.Play(hit, n, 1.3f);
-        SpawnFlash(hit, n, R * 0.15f, new Color(1f, 0.08f, 0.06f, 0.75f));
+        MemeBurst(hit, n, R, 0.68f, MemeBurstStyle.MarketCrash);
+        SpawnFlash(hit, n, R * 0.07f, new Color(1f, 0.08f, 0.06f, 0.55f));
         LightHit(earth, hit, n, 0.075f, 0.034f, 0.048f, 0.82f);
         earth.ApplyImpact(hit, 15f);
         SpawnRedFloatTiles(hit, center, n, tangent, bitangent, R, 14);
-        yield return MarketTickerShake(0.48f, 0.09f);
+        yield return MarketTickerShake(0.48f, 0.045f);
 
         MemeCaption.Spawn(hit + n * (R * 0.22f), "TRADING HALTED", new Color(1f, 0.15f, 0.08f), R * 0.12f);
-        ApplyCasualtiesStatic(0.0065f);
+        ApplyCasualtiesAt(earth, hit, 0.1f, 0.78f, 1.1f);
 
-        float vibrateDur = 0.22f;
-        float vibrateT = 0f;
-        Vector3 trumpBase = trump.transform.position;
-        while (vibrateT < vibrateDur)
-        {
-            vibrateT += Time.deltaTime;
-            trump.transform.position = trumpBase
-                + tangent * (Mathf.Sin(vibrateT * 80f) * R * 0.003f)
-                + bitangent * (Mathf.Sin(vibrateT * 105f) * R * 0.0025f);
-            yield return null;
-        }
-
-        float fade = 0.32f;
-        float fadeT = 0f;
-        Vector3 trumpScale = trump.transform.localScale;
-        while (fadeT < fade)
-        {
-            fadeT += Time.deltaTime;
-            float u = fadeT / fade;
-            trump.transform.localScale = trumpScale * (1f - u);
-            yield return null;
-        }
-
-        Object.Destroy(trump);
         IsTrumpCrashRunning = false;
         trumpCrashCo = null;
     }
@@ -686,13 +723,11 @@ public class MemeAttackSystem : MonoBehaviour
 
         Vector3 tipSurf = points[steps - 1] - normals[steps - 1] * (R * 0.045f);
         Vector3 tipN = normals[steps - 1];
-        CinematicExplosion.Play(tipSurf, tipN, 1.35f);
-        ImpactShockwave.Spawn(tipSurf, tipN, R * 0.78f);
-        SpawnFlash(tipSurf, tipN, R * 0.13f, new Color(0.12f, 1f, 0.25f, 0.82f));
+        MemeBurst(tipSurf, tipN, R, 0.66f, MemeBurstStyle.ArrowSlam);
+        SpawnFlash(tipSurf, tipN, R * 0.06f, new Color(0.12f, 1f, 0.25f, 0.55f));
         scorch?.PaintMoltenFissures(tipSurf, 0.085f, 0.69f, 2.1f, 7);
         LightHit(earth, tipSurf, tipN, 0.065f, 0.03f, 0.044f, 0.84f);
         earth.ApplyImpact(tipSurf, 18f);
-        CameraShake.Shake(0.48f, 0.34f);
         MemeCaption.Spawn(tipSurf + tipN * (R * 0.12f), "-99%", new Color(1f, 0.1f, 0.08f), R * 0.135f);
 
         yield return new WaitForSeconds(0.18f);
@@ -724,7 +759,8 @@ public class MemeAttackSystem : MonoBehaviour
                 }
             }
 
-            ImpactShockwave.Spawn(hit + n * (R * 0.02f), n, R * (0.22f + ring * 0.1f));
+            if (ring == 4)
+                ImpactShockwave.Spawn(hit + n * (R * 0.02f), n, R * 0.24f);
             yield return new WaitForSeconds(0.095f);
         }
     }
@@ -756,6 +792,41 @@ public class MemeAttackSystem : MonoBehaviour
             CameraShake.Shake(magnitude, 0.035f);
             yield return new WaitForSeconds(0.065f);
         }
+    }
+
+    static IEnumerator FadeOutBillboard(GameObject billboard, float duration)
+    {
+        if (billboard == null)
+            yield break;
+
+        var bb = billboard.GetComponent<MemeBillboard>();
+        if (bb != null)
+            bb.enabled = false;
+
+        var mr = billboard.GetComponent<MeshRenderer>();
+        Material mat = mr != null ? mr.material : null;
+        Color c0 = mat != null ? mat.color : Color.white;
+        Vector3 scale0 = billboard.transform.localScale;
+        duration = Mathf.Max(0.04f, duration);
+        float t = 0f;
+        while (t < duration)
+        {
+            t += Time.deltaTime;
+            float k = 1f - Mathf.Clamp01(t / duration);
+            billboard.transform.localScale = scale0 * k;
+            if (mat != null)
+            {
+                var c = c0;
+                c.a = c0.a * k;
+                mat.color = c;
+            }
+
+            yield return null;
+        }
+
+        if (mr != null)
+            mr.enabled = false;
+        Object.Destroy(billboard);
     }
 
     IEnumerator LaunchTrojanHorse(Vector3 localDir)
@@ -812,12 +883,10 @@ public class MemeAttackSystem : MonoBehaviour
             yield return null;
         }
 
-        CinematicExplosion.Play(growPos, n, 1.2f);
-        ImpactShockwave.Spawn(growPos, n, R * 0.75f);
-        SpawnFlash(growPos, n, R * 0.1f, new Color(1f, 0.55f, 0.12f, 0.72f));
+        MemeBurst(growPos, n, R, 0.62f, MemeBurstStyle.TrojanReveal);
+        SpawnFlash(growPos, n, R * 0.05f, new Color(1f, 0.55f, 0.12f, 0.5f));
         MemeCaption.Spawn(hit + n * (R * 0.38f), "SURPRISE", new Color(1f, 0.82f, 0.25f), R * 0.16f);
         MemeCaption.Spawn(hit + n * (R * 0.26f), "TROJAN", new Color(0.95f, 0.42f, 0.18f), R * 0.13f);
-        CameraShake.Shake(0.42f, 0.3f);
 
         Vector3 tangent = Vector3.Cross(n, Vector3.up);
         if (tangent.sqrMagnitude < 1e-4f)
@@ -860,11 +929,9 @@ public class MemeAttackSystem : MonoBehaviour
                 + bitangent * Random.Range(-patchRadius * 0.55f, patchRadius * 0.55f);
             Vector3 blastN = (localBlast - center).normalized;
             Vector3 blastHit = center + blastN * R;
-            CinematicExplosion.Play(blastHit, blastN, 0.75f + b * 0.12f);
-            ImpactShockwave.Spawn(blastHit, blastN, R * 0.35f);
+            StrikeImpactFx.Play(earth, blastHit, blastN, 0.4f + b * 0.05f, StrikeImpactKind.MemeSoldier);
             LightHit(earth, blastHit, blastN, 0.04f, 0.016f, 0.032f, 0.55f);
             scorch?.BurnAt(blastHit, 0.04f, 0.62f);
-            CameraShake.Shake(0.12f, 0.09f);
             yield return new WaitForSeconds(0.12f);
         }
 
@@ -873,7 +940,7 @@ public class MemeAttackSystem : MonoBehaviour
         scorch?.PaintMoltenFissures(hit, 0.09f, 0.68f, 2.4f, 10);
         LightHit(earth, hit, n, 0.07f, 0.028f, 0.048f, 0.75f);
         earth.ApplyImpact(hit, 14f);
-        ApplyCasualtiesStatic(0.0052f);
+        ApplyCasualtiesAt(earth, hit, 0.08f, 0.58f, 1f);
 
         Vector3 exitStart = horse.transform.position;
         Vector3 exitEnd = hit + n * (R * 4.8f);
@@ -927,14 +994,12 @@ public class MemeAttackSystem : MonoBehaviour
 
     void PlayTariffWorldBlast(EarthSurfaceScorch scorch, Vector3 hit, Vector3 normal, float R, float power)
     {
-        CinematicExplosion.Play(hit, normal, power);
-        ImpactShockwave.Spawn(hit, normal, R * (0.7f + power * 0.18f));
-        SpawnFlash(hit, normal, R * 0.11f, new Color(1f, 0.48f, 0.1f, 0.68f));
+        MemeBurst(hit, normal, R, power * 0.55f, MemeBurstStyle.TariffBlast, shockwave: false);
+        SpawnFlash(hit, normal, R * 0.05f, new Color(1f, 0.48f, 0.1f, 0.45f));
         scorch?.PaintMoltenFissures(hit, 0.085f, 0.66f, 2.15f, 9);
         scorch?.BurnAt(hit, 0.055f, 0.82f);
         LightHit(earth, hit, normal, 0.06f, 0.028f, 0.045f, 0.72f);
         earth.ApplyImpact(hit, 12f + power * 5f);
-        CameraShake.Shake(0.22f + power * 0.06f, 0.18f);
     }
 
     static Vector3 GlobalFireDirection(float u, Vector3 primaryLocal)
@@ -963,21 +1028,39 @@ public class MemeAttackSystem : MonoBehaviour
         }
     }
 
+    Vector3 SurfaceFromLatLon(float lat, float lon)
+    {
+        Vector3 dir = EarthGeo.LatLonToDirection(lat, lon);
+        var col = earth.GetComponent<SphereCollider>();
+        float localR = col != null ? col.radius : 0.5f;
+        return earth.transform.TransformPoint(dir * localR);
+    }
+
+    void PlaceTrumpTariffBillboard(GameObject trump, float lat, float lon, float altMul)
+    {
+        float R = earth.Radius;
+        Vector3 surf = SurfaceFromLatLon(lat, lon);
+        Vector3 sn = (surf - earth.transform.position).normalized;
+        trump.transform.position = surf + sn * (R * altMul);
+        trump.GetComponent<MemeBillboard>()?.FaceTowardEarth(earth);
+    }
+
     Vector3 DirectionWorld(Vector3 localDir) =>
         earth.transform.TransformDirection(localDir).normalized;
 
     Vector3 PointOnRay(Vector3 localDir, float distFromCenter) =>
         earth.transform.position + DirectionWorld(localDir) * distFromCenter;
 
-    public static void ApplyCasualtiesStatic(float frac)
+    public static void ApplyCasualtiesAt(EarthPlanet earth, Vector3 worldHit, float radiusNorm, float lethality, float yield = 1f)
     {
-        var pop = PopulationSystem.Instance;
-        if (pop == null)
+        if (earth == null)
             return;
-        long now = pop.Population;
-        long deaths = (long)Mathf.Floor(now * frac);
-        if (deaths > 0)
-            pop.ApplyCasualties(deaths);
+        PopulationCasualtySystem.ApplyAt(
+            earth,
+            worldHit,
+            PopulationCasualtySystem.ScorchNormToDegrees(radiusNorm),
+            Mathf.Clamp01(lethality * 1.12f),
+            yield * 1.08f);
     }
 
     public static void SpawnFlash(Vector3 point, Vector3 normal, float radius, Color col)

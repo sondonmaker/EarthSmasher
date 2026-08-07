@@ -11,17 +11,22 @@ public class CinematicExplosion : MonoBehaviour
         var go = new GameObject("CinematicExplosion");
         go.transform.position = point;
         var fx = go.AddComponent<CinematicExplosion>();
-        fx.Begin(point, normal.normalized, Mathf.Clamp(power, 0.5f, 3f));
+        fx.Begin(point, normal.normalized, Mathf.Clamp(power, 0.35f, 1.6f));
     }
 
     void Begin(Vector3 point, Vector3 normal, float power)
     {
-        SpawnFlashLight(point, normal, power);
-        SpawnFireball(point, power);
-        SpawnDebris(point, normal, power);
-        SpawnEmbers(point, normal, power);
-        SpawnSmokePuffs(point, normal, power);
-        CameraShake.Shake(0.45f * power, 0.55f * power);
+        bool usedPack = ProFxParticleSpawner.TryCinematicExplosion(point, normal, power);
+
+        SpawnFlashLight(point, normal, power * 0.55f);
+        if (!usedPack)
+        {
+            SpawnFireball(point, power * 0.65f);
+            SpawnEmbers(point, normal, power * 0.5f);
+            SpawnSmokePuffs(point, normal, power * 0.55f);
+            SpawnDebris(point, normal, power * 0.45f);
+        }
+        CameraShake.Shake(0.12f * power, 0.14f * power);
         Destroy(gameObject, 5f);
     }
 

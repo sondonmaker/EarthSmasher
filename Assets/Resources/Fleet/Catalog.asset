@@ -1,0 +1,21 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: ed35acb61935d7245a6bf21e28bd4c7e, type: 3}
+  m_Name: Catalog
+  m_EditorClassIdentifier: 
+  battleship: {fileID: 100100000, guid: cdbec52167efb6a48b63cebb3284c246, type: 3}
+  ufo: {fileID: 100100000, guid: cef6de11ad9c348f1902c4033bed1701, type: 3}
+  fighter: {fileID: 100100000, guid: 94237cc2b5ca52c44a5654ae52a61474, type: 3}
+  fighterAlt: {fileID: 100100000, guid: b1162a5c6d646cc40b545815fb38f1b9, type: 3}
+  planetKiller: {fileID: 100100000, guid: 2dfe3fb997f73f44aace082d35d50b10, type: 3}
+  probe: {fileID: 100100000, guid: 9051477b658334c49ad46bc3a438ae61, type: 3}
+  orbitalCannon: {fileID: 100100000, guid: 62509fffc85c1934aa16ad6266a0b03a, type: 3}

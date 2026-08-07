@@ -11,6 +11,9 @@ public class WeaponRailPanel : MonoBehaviour
     public static WeaponRailPanel Instance { get; private set; }
     public static bool BlocksGameplay { get; private set; }
     public static bool IsArmed => Instance != null && !string.IsNullOrEmpty(Instance.armedId);
+    public static bool BlocksOrbitCamera => Instance != null && Instance.sustainFiring;
+
+    const string LaserSustainId = "laser_sustain";
 
     const float CatSize = 56f;
     const float CatGap = 8f;
@@ -34,6 +37,7 @@ public class WeaponRailPanel : MonoBehaviour
     string armedTitle;
 
     bool pressTracking;
+    bool sustainFiring;
     Vector2 pressPos;
 
     Texture2D pxFace;
@@ -84,12 +88,37 @@ public class WeaponRailPanel : MonoBehaviour
         selectedSub = -1;
     }
 
+    public void OpenCategoryById(string id)
+    {
+        if (cats == null || string.IsNullOrEmpty(id))
+            return;
+        for (int i = 0; i < cats.Length; i++)
+        {
+            if (cats[i].id == id)
+            {
+                OpenCategory(i);
+                return;
+            }
+        }
+    }
+
     public void ClearArm()
     {
+        if (sustainFiring || armedId == LaserSustainId)
+            LaserStrikeSystem.Ensure().EndSustain();
+        sustainFiring = false;
         armedId = null;
         armedTitle = null;
         toast = null;
         pressTracking = false;
+    }
+
+    public void ResetArming()
+    {
+        ClearArm();
+        selectedCat = 0;
+        selectedSub = -1;
+        submenuOpen = true;
     }
 
     void BuildCatalog()
@@ -99,7 +128,7 @@ public class WeaponRailPanel : MonoBehaviour
             new Cat
             {
                 id = "impact",
-                icon = "1",
+                icon = "BOOM",
                 tip = "Impact",
                 subs = new[]
                 {
@@ -107,41 +136,28 @@ public class WeaponRailPanel : MonoBehaviour
                     SubOf("shower", "S", "Meteor Shower", ShowerBusy),
                     SubOf("moon_crash", "O", "Moon Crash", MoonBusy),
                     SubOf("blackhole", "B", "Black Hole"),
-                    SubOf("spike", "X", "Spike Erupt"),
                     SubOf("vortex", "V", "Vortex")
                 }
             },
             new Cat
             {
-                id = "missile",
-                icon = "2",
-                tip = "Missile",
-                subs = new[]
-                {
-                    SubOf("nuke_missile", "N", "Nuke Missile"),
-                    SubOf("fusion", "F", "Fusion Core"),
-                    SubOf("station", "T", "Missile Station", null, true),
-                    SubOf("remote", "R", "Remote Detonate", null, true),
-                    SubOf("antimatter", "A", "Antimatter"),
-                    SubOf("drill", "D", "Mining Drill"),
-                    SubOf("guided", "G", "Guided Missile")
-                }
-            },
-            new Cat
-            {
                 id = "war",
-                icon = "3",
+                icon = "WAR",
                 tip = "War",
                 subs = new[]
                 {
                     SubOf("nuke_war", "N", "Nuclear War", NukeBusy),
-                    SubOf("quake", "E", "Earthquake", QuakeBusy)
+                    SubOf("nuke_missile", "1", "Nuke Missile"),
+                    SubOf("antimatter", "A", "Antimatter"),
+                    SubOf("guided", "G", "Guided Missile"),
+                    SubOf("fusion", "2", "Fusion Core"),
+                    SubOf("drill", "D", "Mining Drill")
                 }
             },
             new Cat
             {
                 id = "fleet",
-                icon = "4",
+                icon = "SHIP",
                 tip = "Fleet",
                 subs = new[]
                 {
@@ -149,38 +165,52 @@ public class WeaponRailPanel : MonoBehaviour
                     SubOf("cannon", "C", "Orbital Cannon"),
                     SubOf("fighters", "F", "Fighter Wing"),
                     SubOf("battleship", "B", "Battleship"),
-                    SubOf("planet_killer", "P", "Planet Killer"),
-                    SubOf("von_neumann", "V", "Von Neumann")
+                    SubOf("planet_killer", "P", "Planet Killer")
                 }
             },
             new Cat
             {
                 id = "laser",
-                icon = "5",
+                icon = "BEAM",
                 tip = "Laser",
                 subs = new[]
                 {
+                    SubOf("laser_sustain", "H", "Hold Beam"),
                     SubOf("laser_fire", "1", "Fire Laser"),
                     SubOf("laser_ice", "2", "Ice Laser"),
                     SubOf("laser_pierce", "3", "Pierce Laser"),
                     SubOf("laser_plasma", "4", "Plasma Laser"),
-                    SubOf("laser_bolt", "5", "Lightning")
+                    SubOf("laser_bolt", "5", "Lightning"),
+                    SubOf("laser_nano", "N", "Nano Swarm")
+                }
+            },
+            new Cat
+            {
+                id = "olympus",
+                icon = "GOD",
+                tip = "Olympus",
+                subs = new[]
+                {
+                    SubOf("zeus", "Z", "Zeus Thunder", GreekBusy),
+                    SubOf("poseidon", "P", "Poseidon Tsunami", GreekBusy),
+                    SubOf("hades", "H", "Hades Plague", GreekBusy),
+                    SubOf("apollo", "A", "Apollo Sun", GreekBusy),
+                    SubOf("ares", "R", "Ares Fury", GreekBusy),
+                    SubOf("hephaestus", "F", "Hephaestus Forge", GreekBusy)
                 }
             },
             new Cat
             {
                 id = "meme",
-                icon = "M",
+                icon = "MEME",
                 tip = "Meme",
                 subs = new[]
                 {
                     SubOf("doge", "D", "Doge Strike", MemeBusy),
                     SubOf("to_the_moon", "T", "To The Moon", MoonRunBusy),
-                    SubOf("pengu_coin", "G", "Pengu Coin", PenguBusy),
                     SubOf("trump_tariff", "R", "Trump Tariff", TrumpBusy),
                     SubOf("trump_market_crash", "C", "Market Crash", TrumpCrashBusy),
                     SubOf("pepe", "P", "Pepe Punch"),
-                    SubOf("cat", "=", "Giant Cat"),
                     SubOf("shark", "S", "Sneaker Shark"),
                     SubOf("trojan_horse", "H", "Trojan Horse", TrojanBusy)
                 }
@@ -260,8 +290,19 @@ public class WeaponRailPanel : MonoBehaviour
         }
 
         if (BlocksGameplay || EarthLayerToolbar.BlocksGameplayInput
+            || EarthSettingsPanel.BlocksGameplayInput
             || ZoomUiBlocker.BlocksGameplay || WorldStatusHud.BlocksGameplay)
+        {
+            if (armedId == LaserSustainId)
+                StopSustainLaser();
             return;
+        }
+
+        if (armedId == LaserSustainId)
+        {
+            UpdateSustainLaserInput();
+            return;
+        }
 
         if (!TryConsumeTap(out Vector2 screenPos))
             return;
@@ -269,6 +310,95 @@ public class WeaponRailPanel : MonoBehaviour
             return;
 
         ExecuteArmed(point, normal);
+    }
+
+    void UpdateSustainLaserInput()
+    {
+        if (!TryGetHoldInput(out Vector2 screenPos, out bool down, out bool held, out bool up))
+        {
+            if (sustainFiring)
+                StopSustainLaser();
+            return;
+        }
+
+        var laser = LaserStrikeSystem.Ensure();
+
+        if (up)
+        {
+            StopSustainLaser();
+            return;
+        }
+
+        if (!down && !held)
+            return;
+
+        if (!TryGetEarthHit(screenPos, out Vector3 point, out Vector3 normal))
+        {
+            if (sustainFiring)
+                StopSustainLaser();
+            return;
+        }
+
+        if (down)
+        {
+            sustainFiring = true;
+            laser.BeginSustain(point, normal, screenPos);
+        }
+        else if (sustainFiring)
+        {
+            laser.UpdateSustain(point, normal, screenPos);
+        }
+    }
+
+    void StopSustainLaser()
+    {
+        sustainFiring = false;
+        LaserStrikeSystem.Ensure().EndSustain();
+    }
+
+    bool TryGetHoldInput(out Vector2 screenPos, out bool down, out bool held, out bool up)
+    {
+        screenPos = default;
+        down = held = up = false;
+
+        var touchscreen = Touchscreen.current;
+        if (touchscreen != null)
+        {
+            int active = 0;
+            int idx = -1;
+            for (int i = 0; i < touchscreen.touches.Count; i++)
+            {
+                var t = touchscreen.touches[i];
+                if (t.press.isPressed || t.press.wasPressedThisFrame || t.press.wasReleasedThisFrame)
+                {
+                    active++;
+                    idx = i;
+                }
+            }
+
+            if (active > 1)
+                return false;
+
+            if (active == 1)
+            {
+                var touch = touchscreen.touches[idx];
+                screenPos = touch.position.ReadValue();
+                down = touch.press.wasPressedThisFrame;
+                held = touch.press.isPressed;
+                up = touch.press.wasReleasedThisFrame;
+                return down || held || up;
+            }
+        }
+
+        var mouse = Mouse.current;
+        if (mouse == null)
+            return false;
+
+        screenPos = mouse.position.ReadValue();
+        down = mouse.leftButton.wasPressedThisFrame;
+        held = mouse.leftButton.isPressed;
+        up = mouse.leftButton.wasReleasedThisFrame;
+        return down || held || up;
     }
 
     void OnGUI()
@@ -333,13 +463,9 @@ public class WeaponRailPanel : MonoBehaviour
                 panelH = subs.Length * (subH + subGap) - subGap;
             }
 
-            // 선택한 카테고리 버튼 위쪽으로 펼쳐서 하단(캣/샤크/카우)이 잘리지 않게
-            float subBaseY = catY + CatSize - panelH;
-            if (subBaseY < Top)
-                subBaseY = Top;
-            float maxBaseY = MobileUi.Height - Pad - panelH;
-            if (subBaseY > maxBaseY)
-                subBaseY = Mathf.Max(Top, maxBaseY);
+            // 선택 카테고리 중심에 맞춰 펼침 — 6번째 항목이 화면 밖으로 밀리지 않게
+            float subBaseY = catY + (CatSize - panelH) * 0.5f;
+            subBaseY = Mathf.Clamp(subBaseY, Top, Mathf.Max(Top, MobileUi.Height - Pad - panelH));
 
             for (int i = 0; i < subs.Length; i++)
             {
@@ -368,7 +494,7 @@ public class WeaponRailPanel : MonoBehaviour
         bool touch = MobileUi.IsTouchDevice;
 
         string hint = !string.IsNullOrEmpty(armedId)
-            ? (armedTitle ?? armedId).ToUpperInvariant() + (touch ? " armed — tap Earth" : " armed — click Earth  (Esc/RMB cancel)")
+            ? BuildArmHint(armedId, armedTitle, touch, sustainFiring)
             : toast;
         if (!string.IsNullOrEmpty(hint))
             GUI.Label(new Rect(screenW * 0.5f - 220f, screenH - 48f, 440f, 28f), hint, toastStyle);
@@ -389,6 +515,19 @@ public class WeaponRailPanel : MonoBehaviour
         BlocksGameplay = blocking;
     }
 
+    static string BuildArmHint(string armedId, string armedTitle, bool touch, bool sustainFiring)
+    {
+        string name = (armedTitle ?? armedId).ToUpperInvariant();
+        if (armedId == LaserSustainId)
+        {
+            if (sustainFiring)
+                return name + (touch ? " — drag to carve" : " — hold & drag to carve");
+            return name + (touch ? " armed — hold on Earth" : " armed — hold click on Earth  (Esc/RMB cancel)");
+        }
+
+        return name + (touch ? " armed — tap Earth" : " armed — click Earth  (Esc/RMB cancel)");
+    }
+
     void ArmWeapon(string id, string title)
     {
         if (armedId == id)
@@ -396,6 +535,9 @@ public class WeaponRailPanel : MonoBehaviour
             ClearArm();
             return;
         }
+
+        if (sustainFiring || armedId == LaserSustainId)
+            StopSustainLaser();
 
         armedId = id;
         armedTitle = title;
@@ -466,8 +608,12 @@ public class WeaponRailPanel : MonoBehaviour
             case "laser_bolt":
                 LaserStrikeSystem.Ensure().FireAt(PlanetLaserKind.Lightning, point, normal);
                 break;
+            case "laser_nano":
+                SpacecraftFleetSystem.Ensure().TrySummonAt(SpacecraftKind.VonNeumannProbe, point);
+                break;
             case "ufo":
-                SpacecraftFleetSystem.Ensure().TrySummonAt(SpacecraftKind.Ufo, point);
+                if (!SpacecraftFleetSystem.Ensure().TrySummonAt(SpacecraftKind.Ufo, point))
+                    toast = "Too many UFOs (max 8)";
                 break;
             case "cannon":
                 SpacecraftFleetSystem.Ensure().TrySummonAt(SpacecraftKind.OrbitalCannon, point);
@@ -480,9 +626,6 @@ public class WeaponRailPanel : MonoBehaviour
                 break;
             case "planet_killer":
                 SpacecraftFleetSystem.Ensure().TrySummonAt(SpacecraftKind.PlanetKiller, point);
-                break;
-            case "von_neumann":
-                SpacecraftFleetSystem.Ensure().TrySummonAt(SpacecraftKind.VonNeumannProbe, point);
                 break;
             case "doge":
             case "to_the_moon":
@@ -514,6 +657,15 @@ public class WeaponRailPanel : MonoBehaviour
                     else
                         toast = "Cannot fire meme weapon";
                 }
+                break;
+            case "zeus":
+            case "poseidon":
+            case "hades":
+            case "apollo":
+            case "ares":
+            case "hephaestus":
+                if (!GreekMythAttackSystem.Ensure().TryFire(id, point, normal))
+                    toast = "Olympian wrath already in progress";
                 break;
             case "quake":
             {
@@ -627,17 +779,20 @@ public class WeaponRailPanel : MonoBehaviour
         return true;
     }
 
-    bool DrawSquareButton(Rect r, string icon, bool on)
+    bool DrawSquareButton(Rect r, string label, bool on)
     {
         DrawFramed(r, on);
+        int len = label != null ? label.Length : 0;
+        int fontSize = len <= 3 ? 17 : len == 4 ? 13 : 11;
         var iconStyle = new GUIStyle(GUI.skin.label)
         {
-            fontSize = 22,
+            fontSize = fontSize,
             alignment = TextAnchor.MiddleCenter,
-            fontStyle = FontStyle.Bold
+            fontStyle = FontStyle.Bold,
+            wordWrap = true
         };
         iconStyle.normal.textColor = Color.white;
-        GUI.Label(r, icon, iconStyle);
+        GUI.Label(new Rect(r.x + 3f, r.y + 3f, r.width - 6f, r.height - 6f), label, iconStyle);
         return GUI.Button(r, GUIContent.none, GUIStyle.none);
     }
 
@@ -648,15 +803,13 @@ public class WeaponRailPanel : MonoBehaviour
         if (dimmed)
             GUI.color = new Color(1f, 1f, 1f, 0.45f);
 
-        var iconStyle = new GUIStyle(GUI.skin.label)
+        var nameStyle = new GUIStyle(labelStyle)
         {
-            fontSize = 20,
+            fontSize = 11,
             alignment = TextAnchor.MiddleCenter,
-            fontStyle = FontStyle.Bold
+            wordWrap = true
         };
-        iconStyle.normal.textColor = Color.white;
-        GUI.Label(new Rect(r.x, r.y + 6f, r.width, 36f), icon, iconStyle);
-        GUI.Label(new Rect(r.x + 4f, r.yMax - 28f, r.width - 8f, 24f), title.ToUpperInvariant(), labelStyle);
+        GUI.Label(new Rect(r.x + 4f, r.y + 4f, r.width - 8f, r.height - 8f), title.ToUpperInvariant(), nameStyle);
 
         GUI.color = prev;
         return GUI.Button(r, GUIContent.none, GUIStyle.none);
@@ -729,5 +882,11 @@ public class WeaponRailPanel : MonoBehaviour
     {
         var m = MemeAttackSystem.Instance;
         return m != null && m.IsTrojanRunning;
+    }
+
+    static bool GreekBusy()
+    {
+        var g = GreekMythAttackSystem.Instance;
+        return g != null && g.IsBusy;
     }
 }

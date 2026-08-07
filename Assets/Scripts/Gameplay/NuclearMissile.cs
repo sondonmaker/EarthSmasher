@@ -108,38 +108,32 @@ public class NuclearMissile : MonoBehaviour
 
     static GameObject CreateBody(EarthPlanet earth, bool tiny)
     {
-        var go = GameObject.CreatePrimitive(PrimitiveType.Capsule);
-        go.name = tiny ? "NuclearMissile" : "SpaceNukeMissile";
-        UnityEngine.Object.Destroy(go.GetComponent<Collider>());
-
+        var go = new GameObject(tiny ? "NuclearMissile" : "SpaceNukeMissile");
         if (tiny)
-        {
             go.transform.SetParent(earth.transform, false);
-            go.transform.localScale = new Vector3(0.003f, 0.008f, 0.003f);
-        }
-        else
+
+        if (NuclearMissileVisuals.AttachRandomVisual(go.transform, tiny, earth.Radius) == null)
         {
-            // 운석보다 길쭉한 미사일 실루엣
-            go.transform.localScale = new Vector3(0.12f, 0.38f, 0.12f);
+            var capsule = GameObject.CreatePrimitive(PrimitiveType.Capsule);
+            capsule.name = "FallbackCapsule";
+            UnityEngine.Object.Destroy(capsule.GetComponent<Collider>());
+            capsule.transform.SetParent(go.transform, false);
+            capsule.transform.localRotation = Quaternion.identity;
+
+            if (tiny)
+                capsule.transform.localScale = new Vector3(0.003f, 0.008f, 0.003f);
+            else
+                capsule.transform.localScale = new Vector3(0.12f, 0.38f, 0.12f);
+
+            var rend = capsule.GetComponent<Renderer>();
+            rend.material = RuntimeMaterial.Opaque(new Color(0.85f, 0.88f, 0.92f), 0.6f);
+            rend.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
         }
-
-        var rend = go.GetComponent<Renderer>();
-        rend.material = RuntimeMaterial.Opaque(new Color(0.85f, 0.88f, 0.92f), 0.6f);
-        rend.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
-
-        // 노즐 불꽃
-        var flame = GameObject.CreatePrimitive(PrimitiveType.Sphere);
-        UnityEngine.Object.Destroy(flame.GetComponent<Collider>());
-        flame.name = "Exhaust";
-        flame.transform.SetParent(go.transform, false);
-        flame.transform.localPosition = new Vector3(0f, -0.55f, 0f);
-        flame.transform.localScale = tiny ? Vector3.one * 0.8f : new Vector3(0.7f, 0.9f, 0.7f);
-        flame.GetComponent<Renderer>().material = RuntimeMaterial.Opaque(new Color(1f, 0.45f, 0.1f), 3.5f);
 
         var trail = go.AddComponent<TrailRenderer>();
-        trail.time = tiny ? 0.55f : 1.1f;
-        trail.startWidth = tiny ? 0.008f : 0.14f;
-        trail.endWidth = tiny ? 0.0015f : 0.02f;
+        trail.time = tiny ? 0.35f : 1.1f;
+        trail.startWidth = tiny ? 0.0025f : 0.12f;
+        trail.endWidth = tiny ? 0.0006f : 0.018f;
         trail.material = RuntimeMaterial.UnlitTransparent(new Color(1f, 0.75f, 0.35f, 0.9f));
         trail.startColor = new Color(1f, 0.9f, 0.55f, 0.95f);
         trail.endColor = new Color(1f, 0.35f, 0.05f, 0f);
@@ -165,7 +159,7 @@ public class NuclearMissile : MonoBehaviour
         radius = 0.5f;
         float ang = Vector3.Angle(startDir, endDir);
         loft = Mathf.Lerp(0.04f, 0.16f, Mathf.Clamp01(ang / 140f));
-        duration = Mathf.Max(0.8f, flightSeconds);
+        duration = Mathf.Max(0.28f, flightSeconds);
         power = blastPower;
         onImpact = callback;
         t = 0f;
@@ -253,11 +247,17 @@ public class NuclearMissile : MonoBehaviour
     void ApplyPose(float u)
     {
         Vector3 pos = SampleWorld(u);
-        Vector3 next = SampleWorld(Mathf.Min(1f, u + 0.02f));
+        float lookAhead = mode == FlightMode.SpaceDive ? 0.04f : 0.025f;
+        Vector3 next = SampleWorld(Mathf.Min(1f, u + lookAhead));
         transform.position = pos;
         Vector3 vel = next - pos;
         if (vel.sqrMagnitude > 1e-8f)
-            transform.rotation = Quaternion.LookRotation(vel.normalized) * Quaternion.Euler(90f, 0f, 0f);
+        {
+            var rot = Quaternion.LookRotation(vel.normalized, Vector3.up);
+            if (!NuclearMissileVisuals.UsesCartoonVisual(transform))
+                rot *= Quaternion.Euler(90f, 0f, 0f);
+            transform.rotation = rot;
+        }
     }
 
     Vector3 SampleWorld(float u)

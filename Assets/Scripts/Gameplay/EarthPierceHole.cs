@@ -29,6 +29,12 @@ public class EarthPierceHole : MonoBehaviour
         public GameObject tunnel;
     }
 
+    [System.Serializable]
+    public struct HoleSnapshot
+    {
+        public float ax, ay, az, radius;
+    }
+
     EarthPlanet earth;
     readonly List<Hole> holes = new List<Hole>();
     Material crustMat;
@@ -69,6 +75,26 @@ public class EarthPierceHole : MonoBehaviour
         float localRadius = Mathf.Clamp(radiusWorld, earth.Radius * 0.1f, earth.Radius * 0.28f) * worldToLocal;
         Vector3 localAxis = earth.transform.InverseTransformDirection(worldAxis).normalized;
 
+        for (int i = 0; i < holes.Count; i++)
+        {
+            if (Vector3.Dot(holes[i].localAxis, localAxis) > 0.985f)
+            {
+                float mergedR = Mathf.Max(holes[i].localRadius, localRadius);
+                if (holes[i].tunnel != null)
+                    Destroy(holes[i].tunnel);
+
+                holes[i] = new Hole
+                {
+                    localAxis = localAxis,
+                    localRadius = mergedR,
+                    tunnel = BuildMantleBore(localAxis, mergedR, shell)
+                };
+                PushToShader();
+                FinishPierceSurface(entryWorld, exitWorld, mergedR / shell * 1.08f);
+                return;
+            }
+        }
+
         while (holes.Count >= MaxHoles)
         {
             if (holes[0].tunnel != null)
@@ -83,11 +109,41 @@ public class EarthPierceHole : MonoBehaviour
             tunnel = BuildMantleBore(localAxis, localRadius, shell)
         });
         PushToShader();
+        FinishPierceSurface(entryWorld, exitWorld, localRadius / shell * 1.08f);
+    }
 
-        float scorchR = localRadius / shell * 1.1f;
+    void FinishPierceSurface(Vector3 entryWorld, Vector3 exitWorld, float carveNorm)
+    {
+        CleanupLavaNearPierce(entryWorld, exitWorld, carveNorm * 1.35f);
         var scorch = EarthSurfaceScorch.Ensure(earth);
-        scorch?.BurnAt(entryWorld, scorchR, 0.92f);
-        scorch?.BurnAt(exitWorld, scorchR, 0.92f);
+        scorch?.CarveOpening(entryWorld, carveNorm);
+        scorch?.CarveOpening(exitWorld, carveNorm * 0.95f);
+        ReapplyShader();
+    }
+
+    void CleanupLavaNearPierce(Vector3 entryWorld, Vector3 exitWorld, float radiusNorm)
+    {
+        float angleRad = Mathf.Asin(Mathf.Clamp(radiusNorm, 0.01f, 0.95f)) * 1.45f;
+        float cosThreshold = Mathf.Cos(angleRad);
+        Vector3 center = earth.transform.position;
+        Vector3 entryDir = (entryWorld - center).normalized;
+        Vector3 exitDir = (exitWorld - center).normalized;
+        for (int i = earth.transform.childCount - 1; i >= 0; i--)
+        {
+            var ch = earth.transform.GetChild(i);
+            if (!ch.name.StartsWith("LavaHit"))
+                continue;
+
+            var mf = ch.GetComponent<MeshFilter>();
+            if (mf == null || mf.sharedMesh == null)
+                continue;
+
+            Vector3 localCenter = mf.sharedMesh.bounds.center;
+            Vector3 worldDir = earth.transform.TransformDirection(localCenter).normalized;
+            if (Vector3.Dot(worldDir, entryDir) >= cosThreshold
+                || Vector3.Dot(worldDir, exitDir) >= cosThreshold)
+                Object.Destroy(ch.gameObject);
+        }
     }
 
     /// <summary>
@@ -95,11 +151,10 @@ public class EarthPierceHole : MonoBehaviour
     /// </summary>
     GameObject BuildMantleBore(Vector3 localAxis, float innerRadius, float shell)
     {
-        float innerR = innerRadius * 0.99f;
-        // 구멍 둘레만 감싸는 벽 — 행성을 덮어버리지 않도록 얇게
-        float outerR = Mathf.Min(innerR * 1.32f, shell * 0.55f);
-        // 터널 끝이 표면 밖으로 튀어나오지 않게
-        float halfLen = Mathf.Sqrt(Mathf.Max(1e-4f, shell * shell - outerR * outerR)) * 0.995f;
+        // 안쪽 반경 = 셰이더 clip 반경과 일치. 안쪽은 울퉁불퉁하게 하지 않아 시야를 막지 않음.
+        float innerR = innerRadius;
+        float outerR = innerR + shell * 0.028f;
+        float halfLen = Mathf.Sqrt(Mathf.Max(1e-4f, shell * shell - outerR * outerR)) * 0.992f;
 
         var root = new GameObject("PierceMantleBore");
         root.transform.SetParent(earth.transform, false);
@@ -109,7 +164,7 @@ public class EarthPierceHole : MonoBehaviour
 
         var mf = root.AddComponent<MeshFilter>();
         var mr = root.AddComponent<MeshRenderer>();
-        mf.sharedMesh = BuildThickMantleTube(innerR, outerR, halfLen, 40, 18);
+        mf.sharedMesh = BuildThickMantleTube(innerR, outerR, halfLen, 36, 16);
         mr.shadowCastingMode = ShadowCastingMode.Off;
         mr.receiveShadows = false;
 
@@ -118,42 +173,40 @@ public class EarthPierceHole : MonoBehaviour
         if (shader != null)
         {
             mat = new Material(shader);
-            mat.SetColor("_Color", new Color(0.13f, 0.08f, 0.06f, 1f));
-            mat.SetColor("_MoltenColor", new Color(1f, 0.3f, 0.05f, 1f));
-            mat.SetFloat("_Emission", 0.5f);
+            mat.SetColor("_Color", new Color(0.11f, 0.07f, 0.05f, 1f));
+            mat.SetColor("_MoltenColor", new Color(0.55f, 0.14f, 0.04f, 1f));
+            mat.SetFloat("_Emission", 0.12f);
         }
         else
         {
-            mat = RuntimeMaterial.Opaque(new Color(0.17f, 0.09f, 0.06f), 0.35f);
+            mat = RuntimeMaterial.Opaque(new Color(0.14f, 0.08f, 0.06f), 0.2f);
         }
         mr.material = mat;
         return root;
     }
 
-    /// <summary>속이 빈 두꺼운 원통 (inner→outer). 안쪽 벽 + 바깥 벽 + 양쪽 링 캡.</summary>
+    /// <summary>속이 빈 원통 벽 (inner→outer). 끝 링 캡 없음 — 시야가 막히지 않게.</summary>
     static Mesh BuildThickMantleTube(float innerR, float outerR, float halfLen, int segments, int rings)
     {
         int sliceCount = rings + 1;
         int ringStride = segments * 2;
         int wallVertCount = sliceCount * ringStride;
-        int capVertCount = segments * 4;
-        var verts = new Vector3[wallVertCount + capVertCount];
-        var norms = new Vector3[verts.Length];
-        var uvs = new Vector2[verts.Length];
-        var tris = new List<int>(rings * segments * 12 + segments * 12);
+        var verts = new Vector3[wallVertCount];
+        var norms = new Vector3[wallVertCount];
+        var uvs = new Vector2[wallVertCount];
+        var tris = new List<int>(rings * segments * 12);
 
         for (int y = 0; y < sliceCount; y++)
         {
             float v = y / (float)rings;
             float py = Mathf.Lerp(-halfLen, halfLen, v);
-            float belly = 1f - 0.06f * Mathf.Sin(v * Mathf.PI);
             for (int i = 0; i < segments; i++)
             {
                 float u = i / (float)segments;
                 float ang = u * Mathf.PI * 2f;
-                float jag = 1f + 0.06f * (Mathf.PerlinNoise(u * 5.5f + 2.1f, v * 3.7f) * 2f - 1f);
-                float ir = innerR * belly * jag;
-                float orad = outerR * (0.97f + 0.03f * Mathf.PerlinNoise(u * 2.2f, v * 1.4f));
+                // 안쪽은 매끈 — clip 구멍 안으로 튀어나와 막히지 않게
+                float ir = innerR;
+                float orad = outerR * (0.985f + 0.015f * Mathf.PerlinNoise(u * 2.2f, v * 1.4f));
                 float c = Mathf.Cos(ang);
                 float s = Mathf.Sin(ang);
 
@@ -193,52 +246,6 @@ public class EarthPierceHole : MonoBehaviour
             }
         }
 
-        int capBase = wallVertCount;
-        for (int end = 0; end < 2; end++)
-        {
-            float py = end == 0 ? -halfLen : halfLen;
-            float ny = end == 0 ? -1f : 1f;
-            int baseIdx = capBase + end * segments * 2;
-            int wallY = end == 0 ? 0 : rings;
-
-            for (int i = 0; i < segments; i++)
-            {
-                float u = i / (float)segments;
-                Vector3 inner = verts[wallY * ringStride + i];
-                Vector3 outer = verts[wallY * ringStride + segments + i];
-                inner.y = py;
-                outer.y = py;
-
-                int ii = baseIdx + i;
-                int oi = baseIdx + segments + i;
-                verts[ii] = inner;
-                verts[oi] = outer;
-                norms[ii] = new Vector3(0f, ny, 0f);
-                norms[oi] = new Vector3(0f, ny, 0f);
-                uvs[ii] = new Vector2(u * 4f, 0f);
-                uvs[oi] = new Vector2(u * 4f, 1f);
-            }
-
-            for (int i = 0; i < segments; i++)
-            {
-                int iNext = (i + 1) % segments;
-                int ii = baseIdx + i;
-                int inx = baseIdx + iNext;
-                int oi = baseIdx + segments + i;
-                int onx = baseIdx + segments + iNext;
-                if (end == 0)
-                {
-                    tris.Add(ii); tris.Add(oi); tris.Add(inx);
-                    tris.Add(inx); tris.Add(oi); tris.Add(onx);
-                }
-                else
-                {
-                    tris.Add(ii); tris.Add(inx); tris.Add(oi);
-                    tris.Add(inx); tris.Add(onx); tris.Add(oi);
-                }
-            }
-        }
-
         var mesh = new Mesh { name = "PierceMantleBore" };
         mesh.vertices = verts;
         mesh.normals = norms;
@@ -262,6 +269,50 @@ public class EarthPierceHole : MonoBehaviour
         PushToShader();
     }
 
+    public void ExportSnapshots(System.Collections.Generic.List<HoleSnapshot> dst)
+    {
+        if (dst == null)
+            return;
+        dst.Clear();
+        for (int i = 0; i < holes.Count; i++)
+        {
+            var h = holes[i];
+            dst.Add(new HoleSnapshot
+            {
+                ax = h.localAxis.x,
+                ay = h.localAxis.y,
+                az = h.localAxis.z,
+                radius = h.localRadius
+            });
+        }
+    }
+
+    public void RestoreSnapshots(System.Collections.Generic.IReadOnlyList<HoleSnapshot> src)
+    {
+        ClearAll();
+        if (src == null || src.Count == 0)
+            return;
+
+        BindMaterial();
+        float shell = LocalShellRadius();
+        for (int i = 0; i < src.Count && holes.Count < MaxHoles; i++)
+        {
+            var s = src[i];
+            var localAxis = new Vector3(s.ax, s.ay, s.az);
+            if (localAxis.sqrMagnitude < 1e-6f)
+                continue;
+            localAxis.Normalize();
+
+            holes.Add(new Hole
+            {
+                localAxis = localAxis,
+                localRadius = Mathf.Max(0.001f, s.radius),
+                tunnel = BuildMantleBore(localAxis, Mathf.Max(0.001f, s.radius), shell)
+            });
+        }
+        PushToShader();
+    }
+
     /// <summary>예전 버전이 남긴 노란 용암 메시/빔 잔재 정리. 기존 관통구는 건드리지 않는다.</summary>
     void CleanupLegacyJunk()
     {
@@ -278,8 +329,9 @@ public class EarthPierceHole : MonoBehaviour
 
     void PushToShader()
     {
-        if (crustMat == null)
-            BindMaterial();
+        var rend = earth != null ? earth.GetComponent<Renderer>() : null;
+        if (rend != null)
+            crustMat = rend.material;
         if (crustMat == null)
             return;
 
@@ -298,8 +350,15 @@ public class EarthPierceHole : MonoBehaviour
 
         crustMat.SetVectorArray("_PierceAxes", axisBuffer);
         crustMat.SetInt("_PierceCount", holes.Count);
-        crustMat.SetFloat("_PierceEdge", LocalShellRadius() * 0.07f);
+        crustMat.SetFloat("_PierceEdge", LocalShellRadius() * 0.045f);
         crustMat.SetColor("_MoltenColor", new Color(1f, 0.28f, 0.04f, 1f));
+    }
+
+    /// <summary>스코치 텍스처 갱신 등으로 머티리얼이 바뀐 뒤 관통구 셰이더 값을 다시 밀어 넣는다.</summary>
+    public void ReapplyShader()
+    {
+        BindMaterial();
+        PushToShader();
     }
 
     void OnDestroy()

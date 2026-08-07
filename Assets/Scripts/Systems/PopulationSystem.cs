@@ -10,7 +10,9 @@ public class PopulationSystem : MonoBehaviour
     public const long BaselinePopulation = 8045919933L;
 
     [SerializeField] double population = BaselinePopulation;
-    [SerializeField] double birthsPerSecond = 85.0;
+    [SerializeField] double birthsPerSecond = 24.0;
+
+    float growthResumeTime;
 
     public long Population => (long)System.Math.Max(0, System.Math.Floor(population));
     public bool GrowthPaused { get; set; }
@@ -31,7 +33,7 @@ public class PopulationSystem : MonoBehaviour
 
     void Update()
     {
-        if (GrowthPaused)
+        if (GrowthPaused || Time.unscaledTime < growthResumeTime)
             return;
         population += birthsPerSecond * GrowthSpeedMultiplier * Time.unscaledDeltaTime;
     }
@@ -40,7 +42,31 @@ public class PopulationSystem : MonoBehaviour
 
     public void ApplyCasualties(long deaths)
     {
-        population = System.Math.Max(0, population - System.Math.Max(0, deaths));
+        deaths = System.Math.Max(0, deaths);
+        if (deaths <= 0)
+            return;
+
+        population = System.Math.Max(0, population - deaths);
+
+        // 피해 직후 출생 보충 완화 — 대량 재해일수록 더 오래 멈춤
+        float pauseSec = (float)System.Math.Clamp(deaths / 40_000_000.0, 3.0, 60.0);
+        growthResumeTime = Mathf.Max(growthResumeTime, Time.unscaledTime + pauseSec);
+    }
+
+    public void ClampPopulation(long max)
+    {
+        max = System.Math.Max(0, max);
+        if (Population <= max)
+            return;
+        population = max;
+    }
+
+    public void ResetToDefaults()
+    {
+        population = BaselinePopulation;
+        GrowthPaused = false;
+        GrowthSpeedMultiplier = 1f;
+        growthResumeTime = 0f;
     }
 
     public static string Format(long n) => n.ToString("#,0");

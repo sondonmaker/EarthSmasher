@@ -11,8 +11,11 @@ public class EarthSurfaceScorch : MonoBehaviour
     Texture2D working;
     Texture sourceTex;
     Color32[] pixels;
+    Color32[] basePixels;
     bool dirty;
     int dirtyFrames;
+    float nextTextureApply;
+    const float TextureApplyInterval = 0.12f;
 
     static Texture2D lavaColor;
     static Texture2D lavaEmit;
@@ -50,10 +53,20 @@ public class EarthSurfaceScorch : MonoBehaviour
     {
         if (!dirty || working == null)
             return;
+        if (Time.unscaledTime < nextTextureApply)
+            return;
+        FlushTexture();
+    }
+
+    public void FlushTexture()
+    {
+        if (!dirty || working == null)
+            return;
         working.SetPixels32(pixels);
         working.Apply(false);
         dirty = false;
         dirtyFrames = 0;
+        nextTextureApply = Time.unscaledTime + TextureApplyInterval;
     }
 
     void EnsureWorkingTexture()
@@ -145,6 +158,44 @@ public class EarthSurfaceScorch : MonoBehaviour
             RenderTexture.ReleaseTemporary(rt);
             pixels = working.GetPixels32();
         }
+
+        if (pixels != null && pixels.Length > 0)
+        {
+            basePixels = new Color32[pixels.Length];
+            System.Array.Copy(pixels, basePixels, pixels.Length);
+        }
+    }
+
+    /// <summary>0~1 — 그을음·용암·크레이터 텍스처 피해 면적.</summary>
+    public float SampleSurfaceDamage01()
+    {
+        EnsureWorkingTexture();
+        if (pixels == null || basePixels == null || pixels.Length != basePixels.Length)
+            return 0f;
+
+        int step = Mathf.Max(1, pixels.Length / 14000);
+        int damaged = 0;
+        int total = 0;
+        for (int i = 0; i < pixels.Length; i += step)
+        {
+            total++;
+            if (IsDamagedPixel(basePixels[i], pixels[i]))
+                damaged++;
+        }
+
+        float frac = total > 0 ? damaged / (float)total : 0f;
+        return Mathf.Clamp01(Mathf.Sqrt(frac) * 1.4f);
+    }
+
+    static bool IsDamagedPixel(Color32 before, Color32 after)
+    {
+        float bl = before.r * 0.34f + before.g * 0.44f + before.b * 0.22f;
+        float al = after.r * 0.34f + after.g * 0.44f + after.b * 0.22f;
+        if (bl - al > 16f)
+            return true;
+        if (after.r > before.r + 22f && after.g < before.g * 0.82f)
+            return true;
+        return false;
     }
 
     /// <summary>태운 자국·균열·크레이터 자국을 지우고 원래 지표로 되돌린다.</summary>
@@ -159,6 +210,53 @@ public class EarthSurfaceScorch : MonoBehaviour
         working.Apply(false);
         dirty = false;
         dirtyFrames = 0;
+    }
+
+    public bool TryExportPng(out byte[] png)
+    {
+        EnsureWorkingTexture();
+        if (working == null)
+        {
+            png = null;
+            return false;
+        }
+
+        if (dirty)
+        {
+            working.SetPixels32(pixels);
+            working.Apply(false);
+            dirty = false;
+        }
+
+        png = working.EncodeToPNG();
+        return png != null && png.Length > 0;
+    }
+
+    public bool TryImportPng(byte[] png)
+    {
+        EnsureWorkingTexture();
+        if (working == null || png == null || png.Length == 0)
+            return false;
+
+        var temp = new Texture2D(2, 2, TextureFormat.RGB24, false);
+        if (!temp.LoadImage(png))
+        {
+            Object.Destroy(temp);
+            return false;
+        }
+
+        if (temp.width != working.width || temp.height != working.height)
+        {
+            Object.Destroy(temp);
+            return false;
+        }
+
+        pixels = temp.GetPixels32();
+        Object.Destroy(temp);
+        working.SetPixels32(pixels);
+        working.Apply(false);
+        dirty = false;
+        return true;
     }
 
     /// <summary>
@@ -219,6 +317,269 @@ public class EarthSurfaceScorch : MonoBehaviour
                 p.g = (byte)Mathf.RoundToInt(Mathf.Lerp(p.g, ash.g, amount));
                 p.b = (byte)Mathf.RoundToInt(Mathf.Lerp(p.b, ash.b, amount));
                 pixels[idx] = p;
+            }
+        }
+
+        dirty = true;
+    }
+
+    /// <summary>홀드 빔 전용 — 용암 텍스처 샘플 없이 가볍게 태운다.</summary>
+    public void PaintSustainBurnAt(Vector3 worldPoint, float radiusNorm = 0.018f, float heat = 0.88f)
+    {
+        EnsureWorkingTexture();
+        if (working == null || pixels == null)
+            return;
+        if (!TryImpactUv(worldPoint, out int cx, out int cy, out _, out _))
+            return;
+
+        StampSustainBurnDisc(cx, cy, radiusNorm, heat);
+        dirty = true;
+    }
+
+    /// <summary>홀드 빔 궤적 — step 수 제한 + 경량 스탬프.</summary>
+    public void PaintSustainBurnSegment(Vector3 fromWorld, Vector3 toWorld, float radiusNorm, float heat)
+    {
+        EnsureWorkingTexture();
+        if (working == null || pixels == null)
+            return;
+
+        Vector3 center = transform.position;
+        Vector3 a = (fromWorld - center).normalized;
+        Vector3 b = (toWorld - center).normalized;
+        if (a.sqrMagnitude < 1e-6f || b.sqrMagnitude < 1e-6f)
+        {
+            PaintSustainBurnAt(toWorld, radiusNorm, heat);
+            return;
+        }
+
+        float angleDeg = Vector3.Angle(a, b);
+        int steps = Mathf.Clamp(Mathf.CeilToInt(angleDeg / 3.2f), 1, 10);
+        float shell = LocalShellRadius();
+        for (int i = 0; i <= steps; i++)
+        {
+            float t = i / (float)steps;
+            Vector3 dir = Vector3.Slerp(a, b, t).normalized;
+            Vector3 p = transform.TransformPoint(dir * shell);
+            if (!TryImpactUv(p, out int cx, out int cy, out _, out _))
+                continue;
+            StampSustainBurnDisc(cx, cy, radiusNorm, heat);
+        }
+
+        dirty = true;
+    }
+
+    void StampSustainBurnDisc(int cx, int cy, float radiusNorm, float heat)
+    {
+        int w = working.width;
+        int h = working.height;
+        float radiusPx = Mathf.Clamp(radiusNorm * w * 0.55f, 3f, w * 0.045f);
+        int r = Mathf.CeilToInt(radiusPx);
+        float invR2 = 1f / Mathf.Max(0.001f, radiusPx * radiusPx);
+        heat = Mathf.Clamp01(heat);
+
+        Color32 charred = new Color32(22, 14, 10, 255);
+        Color32 ember = new Color32(190, 48, 12, 255);
+        Color32 core = new Color32(240, 130, 28, 255);
+
+        for (int dy = -r; dy <= r; dy++)
+        {
+            int y = cy + dy;
+            if (y < 0 || y >= h)
+                continue;
+            for (int dx = -r; dx <= r; dx++)
+            {
+                int x = cx + dx;
+                while (x < 0) x += w;
+                while (x >= w) x -= w;
+
+                float dist2 = (dx * dx + dy * dy) * invR2;
+                if (dist2 > 1f)
+                    continue;
+
+                float dist = Mathf.Sqrt(dist2);
+                float fall = 1f - dist;
+                fall *= fall;
+                int idx = y * w + x;
+                Color32 p = pixels[idx];
+
+                if (dist < 0.42f)
+                    p = BlendPx(p, core, heat * fall * 0.75f);
+                else if (dist < 0.78f)
+                    p = BlendPx(p, ember, heat * fall * 0.55f);
+                else
+                    p = BlendPx(p, charred, heat * fall * 0.45f);
+
+                pixels[idx] = p;
+            }
+        }
+    }
+
+    /// <summary>홀드 빔 — 중심은 용암, 가장자리는 그을린 불타는 자국 (텍스처에 영구 남음).</summary>
+    public void PaintBeamBurnAt(Vector3 worldPoint, float radiusNorm = 0.022f, float heat = 0.85f)
+    {
+        EnsureWorkingTexture();
+        if (working == null || pixels == null)
+            return;
+        if (!TryImpactUv(worldPoint, out int cx, out int cy, out _, out _))
+            return;
+
+        EnsureImpactTextures();
+        StampBeamBurnDisc(cx, cy, radiusNorm, heat);
+        dirty = true;
+    }
+
+    /// <summary>빔을 움직일 때 표면을 따라 불타는 선을 이어 그린다.</summary>
+    public void PaintBeamBurnSegment(Vector3 fromWorld, Vector3 toWorld, float radiusNorm, float heat)
+    {
+        Vector3 center = transform.position;
+        Vector3 a = (fromWorld - center).normalized;
+        Vector3 b = (toWorld - center).normalized;
+        if (a.sqrMagnitude < 1e-6f || b.sqrMagnitude < 1e-6f)
+        {
+            PaintBeamBurnAt(toWorld, radiusNorm, heat);
+            return;
+        }
+
+        float angleDeg = Vector3.Angle(a, b);
+        int steps = Mathf.Clamp(Mathf.CeilToInt(angleDeg / 1.45f), 1, 32);
+        float shell = LocalShellRadius();
+        for (int i = 0; i <= steps; i++)
+        {
+            float t = i / (float)steps;
+            Vector3 dir = Vector3.Slerp(a, b, t).normalized;
+            Vector3 p = transform.TransformPoint(dir * shell);
+            PaintBeamBurnAt(p, radiusNorm, heat * Mathf.Lerp(0.82f, 1f, 1f - t * 0.15f));
+        }
+    }
+
+    float LocalShellRadius()
+    {
+        var col = GetComponent<SphereCollider>();
+        return col != null ? col.radius : 0.5f;
+    }
+
+    void StampBeamBurnDisc(int cx, int cy, float radiusNorm, float heat)
+    {
+        int w = working.width;
+        int h = working.height;
+        float radiusPx = Mathf.Clamp(radiusNorm * w * 0.55f, 3f, w * 0.06f);
+        int r = Mathf.CeilToInt(radiusPx);
+        float invR = 1f / Mathf.Max(0.001f, radiusPx);
+        heat = Mathf.Clamp01(heat);
+
+        Color32 charred = new Color32(18, 12, 10, 255);
+        Color32 ember = new Color32(210, 52, 10, 255);
+        Color32 core = new Color32(255, 168, 36, 255);
+
+        for (int dy = -r; dy <= r; dy++)
+        {
+            int y = cy + dy;
+            if (y < 0 || y >= h)
+                continue;
+            for (int dx = -r; dx <= r; dx++)
+            {
+                int x = cx + dx;
+                while (x < 0) x += w;
+                while (x >= w) x -= w;
+
+                float dist = Mathf.Sqrt(dx * dx + dy * dy) * invR;
+                if (dist > 1f)
+                    continue;
+
+                float fall = 1f - dist;
+                fall *= fall;
+                int idx = y * w + x;
+                Color32 p = pixels[idx];
+
+                if (dist < 0.38f)
+                {
+                    float coreAmt = heat * Mathf.Lerp(0.55f, 0.92f, fall);
+                    if (lavaColorPx != null)
+                    {
+                        Color32 lava = Sample(lavaColorPx, lavaW, lavaH, x * 0.014f, y * 0.014f);
+                        Color32 emit = lavaEmitPx != null
+                            ? Sample(lavaEmitPx, lavaW, lavaH, x * 0.014f, y * 0.014f)
+                            : lava;
+                        var hot = new Color32(
+                            (byte)Mathf.Min(255, (lava.r * 2 + emit.r) / 2),
+                            (byte)Mathf.Min(255, (lava.g + emit.g / 2) / 2),
+                            (byte)Mathf.Min(255, lava.b / 3 + 12),
+                            255);
+                        p = BlendPx(p, hot, coreAmt);
+                    }
+                    else
+                    {
+                        p = BlendPx(p, core, coreAmt);
+                    }
+                }
+
+                if (dist >= 0.22f && dist < 0.82f)
+                {
+                    float ring = heat * Mathf.Lerp(0.35f, 0.78f, 1f - Mathf.Abs(dist - 0.48f) * 2.2f);
+                    p = BlendPx(p, ember, ring);
+                }
+
+                if (dist >= 0.55f)
+                {
+                    float ashAmt = heat * fall * 0.62f;
+                    p = BlendPx(p, charred, ashAmt);
+                }
+
+                pixels[idx] = p;
+            }
+        }
+    }
+
+    static Color32 BlendPx(Color32 basePx, Color32 tint, float amount)
+    {
+        amount = Mathf.Clamp01(amount);
+        return new Color32(
+            (byte)Mathf.RoundToInt(Mathf.Lerp(basePx.r, tint.r, amount)),
+            (byte)Mathf.RoundToInt(Mathf.Lerp(basePx.g, tint.g, amount)),
+            (byte)Mathf.RoundToInt(Mathf.Lerp(basePx.b, tint.b, amount)),
+            255);
+    }
+
+    /// <summary>관통구 주변 스코치·용암을 지워 구멍이 막혀 보이지 않게 한다.</summary>
+    public void CarveOpening(Vector3 worldPoint, float radiusNorm = 0.035f)
+    {
+        EnsureWorkingTexture();
+        if (working == null || pixels == null || basePixels == null || basePixels.Length != pixels.Length)
+            return;
+
+        Vector3 local = transform.InverseTransformPoint(worldPoint);
+        if (local.sqrMagnitude < 1e-6f)
+            return;
+
+        EarthGeo.DirectionToLatLon(local.normalized, out float lat, out float lon);
+        EarthGeo.LatLonToUv(lat, lon, out float u, out float v);
+
+        int w = working.width;
+        int h = working.height;
+        int cx = Mathf.Clamp(Mathf.RoundToInt(u * (w - 1)), 0, w - 1);
+        int cy = Mathf.Clamp(Mathf.RoundToInt(v * (h - 1)), 0, h - 1);
+
+        float radiusPx = Mathf.Clamp(radiusNorm * w * 0.55f, 4f, w * 0.1f);
+        int r = Mathf.CeilToInt(radiusPx);
+        float invR = 1f / Mathf.Max(0.001f, radiusPx);
+
+        for (int dy = -r; dy <= r; dy++)
+        {
+            int y = cy + dy;
+            if (y < 0 || y >= h)
+                continue;
+            for (int dx = -r; dx <= r; dx++)
+            {
+                int x = cx + dx;
+                while (x < 0) x += w;
+                while (x >= w) x -= w;
+
+                float dist = Mathf.Sqrt(dx * dx + dy * dy) * invR;
+                if (dist > 1f)
+                    continue;
+
+                int idx = y * w + x;
+                pixels[idx] = basePixels[idx];
             }
         }
 

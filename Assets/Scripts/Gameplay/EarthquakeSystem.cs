@@ -85,6 +85,12 @@ public class EarthquakeSystem : MonoBehaviour
         return true;
     }
 
+    public void Abort()
+    {
+        StopAllCoroutines();
+        IsRunning = false;
+    }
+
     public bool TryStart(float magnitude, float lat, float lon)
     {
         if (IsRunning)
@@ -191,9 +197,10 @@ public class EarthquakeSystem : MonoBehaviour
 
     EarthquakeReport BuildReport(float magnitude, QuakeRegion region, float lat, float lon)
     {
-        // 게임용 스케일: M4 소규모 ~ M9 대재앙
-        double raw = System.Math.Pow(10.0, magnitude - 1.8) * region.weight * Random.Range(0.55f, 1.25f);
-        long deaths = (long)System.Math.Min(raw, 80_000_000);
+        float radiusDeg = Mathf.Lerp(1.8f, 13f, Mathf.InverseLerp(4f, 9f, magnitude));
+        float lethality = Mathf.Lerp(0.12f, 0.82f, Mathf.InverseLerp(4f, 9f, magnitude));
+        float yield = Mathf.Lerp(0.85f, 1.15f, region.weight);
+        long deaths = PopulationCasualtySystem.EstimateDeaths(lat, lon, radiusDeg, lethality, yield);
         if (magnitude < 4f)
             deaths = (long)(deaths * 0.15f);
         long injuries = (long)(deaths * Random.Range(2.2f, 4.5f));

@@ -21,6 +21,8 @@ public class EarthPlanet : MonoBehaviour
     MaterialPropertyBlock _mpb;
 
     public int ImpactCount => _impactCount;
+    public float Heat => _heat;
+    public float NuclearScorch => _nuclearScorch;
     public float Radius => GetComponent<SphereCollider>().radius * Mathf.Max(transform.lossyScale.x, transform.lossyScale.y, transform.lossyScale.z);
 
     public event Action<float, Vector3> Damaged;
@@ -46,6 +48,7 @@ public class EarthPlanet : MonoBehaviour
         _heat = Mathf.Min(1f, _heat + Mathf.Max(0.02f, damageAmount * 0.01f));
         ApplyVisuals();
         Damaged?.Invoke(_heat * 100f, worldPoint);
+        PopulationDestructionSync.EnforceCap(this);
     }
 
     /// <summary>누적된 피해 표현(열/핵 그을음/코어 노출)을 되돌린다.</summary>
@@ -54,6 +57,14 @@ public class EarthPlanet : MonoBehaviour
         _heat = 0f;
         _nuclearScorch = 0f;
         _impactCount = 0;
+        ApplyVisuals();
+    }
+
+    public void ApplySavedState(float heat, float nuclearScorch, int impactCount)
+    {
+        _heat = Mathf.Clamp01(heat);
+        _nuclearScorch = Mathf.Clamp01(nuclearScorch);
+        _impactCount = Mathf.Max(0, impactCount);
         ApplyVisuals();
     }
 

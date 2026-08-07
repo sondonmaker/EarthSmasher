@@ -111,6 +111,15 @@ public class NuclearWarSystem : MonoBehaviour
 
     public void Configure(EarthPlanet planet) => earth = planet;
 
+    public void Abort()
+    {
+        StopAllCoroutines();
+        IsRunning = false;
+        var pop = PopulationSystem.Instance;
+        if (pop != null)
+            pop.GrowthPaused = false;
+    }
+
     public bool TryStart(int units)
     {
         if (IsRunning)
@@ -133,20 +142,23 @@ public class NuclearWarSystem : MonoBehaviour
         NuclearWarReport report = BuildReport(units);
         LastReport = report;
 
-        int missileCount = Mathf.Clamp(Mathf.RoundToInt(units * 0.85f), 12, 120);
-        int maxConcurrent = Mathf.Clamp(Mathf.RoundToInt(8 + units * 0.08f), 8, 28);
-        float launchSpacing = Mathf.Lerp(0.22f, 0.08f, Mathf.Clamp01(units / 100f));
+        // 연출용 미사일 수 (통계는 타격마다 누적, 전체는 cap으로 시간 제한)
+        int missileCount = Mathf.Clamp(Mathf.RoundToInt(units * 0.4f), 10, 44);
+        int maxConcurrent = Mathf.Clamp(Mathf.RoundToInt(14 + units * 0.14f), 16, 32);
+        float launchSpacing = Mathf.Lerp(0.055f, 0.018f, Mathf.Clamp01(units / 100f));
+        const float maxWarSeconds = 7.5f;
+        float warStart = Time.unscaledTime;
 
-        long deathsLeft = report.totalDeaths;
-        long deathPerHit = System.Math.Max(1, report.totalDeaths / missileCount);
+        long totalApplied = 0;
 
         int launched = 0;
         int inflight = 0;
         int impacts = 0;
+        bool stopLaunching = false;
 
-        while (launched < missileCount || inflight > 0)
+        while ((!stopLaunching && launched < missileCount) || inflight > 0)
         {
-            while (launched < missileCount && inflight < maxConcurrent)
+            while (!stopLaunching && launched < missileCount && inflight < maxConcurrent)
             {
                 StrikeSite target = PickTarget();
                 StrikeSite origin = PickLaunchSite(target);
@@ -159,7 +171,7 @@ public class NuclearWarSystem : MonoBehaviour
                 float ang = Vector3.Angle(
                     EarthGeo.LatLonToDirection(oLat, oLon),
                     EarthGeo.LatLonToDirection(tLat, tLon));
-                float flight = Mathf.Lerp(1.1f, 2.8f, Mathf.Clamp01(ang / 140f));
+                float flight = Mathf.Lerp(0.28f, 0.72f, Mathf.Clamp01(ang / 140f));
                 float power = Random.Range(0.75f, 1.65f) * Mathf.Lerp(0.85f, 1.25f, target.weight);
 
                 inflight++;
@@ -171,15 +183,21 @@ public class NuclearWarSystem : MonoBehaviour
                     {
                         inflight = Mathf.Max(0, inflight - 1);
                         impacts++;
-                        long chunk = impacts >= missileCount
-                            ? deathsLeft
-                            : System.Math.Min(deathPerHit, deathsLeft);
-                        deathsLeft = System.Math.Max(0, deathsLeft - chunk);
-                        if (pop != null && chunk > 0)
-                            pop.ApplyCasualties(chunk);
+                        Vector3 impactWorld = earth.transform.position
+                            + EarthGeo.LatLonToDirection(tLat, tLon) * earth.Radius;
+                        long applied = PopulationCasualtySystem.ApplyAt(
+                            earth,
+                            impactWorld,
+                            PopulationCasualtySystem.ScorchNormToDegrees(0.048f * power),
+                            Mathf.Clamp01(0.52f + power * 0.2f),
+                            power);
+                        totalApplied += applied;
                     });
 
-                float wait = launchSpacing * Random.Range(0.55f, 1.35f);
+                if (Time.unscaledTime - warStart >= maxWarSeconds)
+                    stopLaunching = true;
+
+                float wait = launchSpacing * Random.Range(0.65f, 1.15f);
                 float sim = WorldStatusHud.Instance != null ? WorldStatusHud.Instance.SimSpeed : 1f;
                 yield return new WaitForSecondsRealtime(wait / Mathf.Max(0.05f, sim));
             }
@@ -187,14 +205,13 @@ public class NuclearWarSystem : MonoBehaviour
             yield return null;
         }
 
-        // 잔여 사망 보정
+        // 남은 미사일 연출은 생략됐을 수 있음 — 통계는 실제 착탄 누적분
+        // 실제 타격 결과로 보고서 갱신
+        report.totalDeaths = totalApplied;
+        report.totalInjuries = (long)(totalApplied * Random.Range(1.4f, 2.6f));
+
         if (pop != null)
-        {
-            long targetPop = PopulationSystem.BaselinePopulation - report.totalDeaths;
-            if (pop.Population > targetPop)
-                pop.ApplyCasualties(pop.Population - targetPop);
             pop.GrowthPaused = false;
-        }
 
         IsRunning = false;
 
@@ -233,11 +250,25 @@ public class NuclearWarSystem : MonoBehaviour
             totalAffectedCities = Mathf.RoundToInt(180 * scale)
         };
 
-        // Reference-scale casualties at 100 units
-        long baseDeaths = 2204006850L;
-        long baseInjuries = 1456637425L;
-        report.totalDeaths = (long)(baseDeaths * scale);
-        report.totalInjuries = (long)(baseInjuries * scale);
+        // Reference-scale estimate at 100 units (실제 값은 타격 지점에 따라 달라짐)
+        long estDeaths = 0;
+        int estMissiles = Mathf.Clamp(Mathf.RoundToInt(units * 0.4f), 10, 44);
+        for (int i = 0; i < estMissiles; i++)
+        {
+            StrikeSite site = Sites[Random.Range(0, Sites.Length)];
+            float tLat = site.lat + Random.Range(-2.2f, 2.2f);
+            float tLon = site.lon + Random.Range(-3f, 3f);
+            float power = Random.Range(0.75f, 1.65f) * Mathf.Lerp(0.85f, 1.25f, site.weight);
+            estDeaths += PopulationCasualtySystem.EstimateDeaths(
+                tLat,
+                tLon,
+                PopulationCasualtySystem.ScorchNormToDegrees(0.048f * power),
+                Mathf.Clamp01(0.52f + power * 0.2f),
+                power);
+        }
+
+        report.totalDeaths = estDeaths;
+        report.totalInjuries = (long)(estDeaths * Random.Range(1.4f, 2.6f));
 
         AddDirect(report, "China", "CN", (long)(1058036564L * scale), ScaleHits(25, scale), ScaleHits(3, scale));
         AddDirect(report, "India", "IN", (long)(910092392L * scale), ScaleHits(15, scale), ScaleHits(1, scale));

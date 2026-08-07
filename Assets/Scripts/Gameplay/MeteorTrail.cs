@@ -1,13 +1,21 @@
 using UnityEngine;
 
 /// <summary>
-/// 운석 낙하 궤적 — 가느다란 화염 꼬리.
+/// 운석 낙하 궤적 — ProFX 연기 꼬리 또는 폴백 TrailRenderer.
 /// </summary>
 [RequireComponent(typeof(MeteorProjectile))]
 public class MeteorTrail : MonoBehaviour
 {
     void Awake()
     {
+        float earthRadius = 2.5f;
+        var earth = Object.FindObjectOfType<EarthPlanet>();
+        if (earth != null)
+            earthRadius = earth.Radius;
+
+        if (ProFxParticleSpawner.AttachTrail(transform, earthRadius) != null)
+            return;
+
         var trail = gameObject.AddComponent<TrailRenderer>();
         trail.time = 0.35f;
         trail.startWidth = 0.12f;

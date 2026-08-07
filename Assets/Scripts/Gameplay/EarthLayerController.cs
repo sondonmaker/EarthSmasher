@@ -108,6 +108,21 @@ public class EarthLayerController : MonoBehaviour
         mat.color = c;
     }
 
+    public void ResetToDefaults()
+    {
+        oceanEnabled = false;
+        cloudsEnabled = true;
+        atmosphereEnabled = true;
+        auroraEnabled = true;
+        nightLightsEnabled = true;
+        oceanStrength = 0.95f;
+        cloudsStrength = 0.62f;
+        atmosphereStrength = 0.5f;
+        auroraStrength = 0.85f;
+        nightLightsStrength = 0.85f;
+        geomagneticActivity = 0.25f;
+    }
+
     public void ApplyAll()
     {
         SetActive(ocean, oceanEnabled);
