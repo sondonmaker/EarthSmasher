@@ -12,17 +12,23 @@ public class EarthCraterDeform : MonoBehaviour
 {
     [SerializeField] MeshFilter crustFilter;
     [SerializeField] float mergeAngleDeg = 10f;
-    [SerializeField] float maxDigDepth = 0.18f;
-    [SerializeField] float minShellRadius = 0.36f;
+    [SerializeField] float maxDigDepth = 0.38f;
+    [SerializeField] float minShellRadius = 0.15f; // 코어 근처까지 — 얕은 껍질 벗김 방지
 
     Mesh workingCrust;
+    Mesh workingMantle;
+    MeshFilter mantleFilter;
     Vector3[] pristineVerts;
+    Vector3[] pristineMantleVerts;
     int lockedVertexCount;
     int lockedUvCount;
     bool ready;
     bool meshDirty;
+    bool mantleDirty;
     int digCountSalt;
     readonly List<DigSite> sites = new List<DigSite>();
+
+    Material mantleOriginalMat;
 
     public int DigSiteCount => sites.Count;
 
@@ -30,6 +36,8 @@ public class EarthCraterDeform : MonoBehaviour
     {
         public Vector3 dir;
         public int hits;
+        public float dug;
+        public float pepeFloorR;
     }
 
     public static EarthCraterDeform Ensure(EarthPlanet earth)
@@ -45,13 +53,18 @@ public class EarthCraterDeform : MonoBehaviour
 
     public void EnsureReady()
     {
-        if (ready)
+        if (ready && workingCrust != null)
             return;
 
+        ready = false;
+        workingCrust = null;
+
+        ResolveCrustFilter();
         if (crustFilter == null)
-            crustFilter = GetComponent<MeshFilter>();
-        if (crustFilter == null)
+        {
+            Debug.LogWarning("[EarthCraterDeform] No crust MeshFilter — mesh dig disabled.");
             return;
+        }
 
         // 기존 메시만 복제 — UV/삼각형 레이아웃 그대로. 새 구체 생성 금지.
         workingCrust = CloneWritableMeshPreserveUv(crustFilter, "EarthCrustDeform");
@@ -91,6 +104,28 @@ public class EarthCraterDeform : MonoBehaviour
         workingCrust.vertices = pristineVerts;
         workingCrust.RecalculateBounds();
         meshDirty = true;
+
+        if (workingMantle != null && pristineMantleVerts != null
+            && pristineMantleVerts.Length == workingMantle.vertexCount)
+        {
+            workingMantle.vertices = pristineMantleVerts;
+            workingMantle.RecalculateBounds();
+            mantleDirty = true;
+        }
+
+        Transform mantle = transform.Find("Mantle");
+        if (mantle != null)
+        {
+            var rend = mantle.GetComponent<Renderer>();
+            if (rend != null)
+            {
+                rend.enabled = true;
+                if (mantleOriginalMat != null)
+                    rend.sharedMaterial = mantleOriginalMat;
+            }
+        }
+
+        RestorePepeBoreVisuals();
     }
 
     public bool TryExportVertices(out Vector3[] verts)
@@ -334,16 +369,19 @@ public class EarthCraterDeform : MonoBehaviour
         site.hits++;
         site.dir = Vector3.Slerp(site.dir, dir, 0.35f).normalized;
 
-        float hitMul = 1f + (site.hits - 1) * (huge ? 0.4f : 0.32f);
-        float depth = Mathf.Clamp(depthNorm * hitMul, 0.02f, maxDigDepth);
-        float radius = Mathf.Clamp(radiusNorm * (1f + (site.hits - 1) * 0.05f), 0.05f, 0.28f);
-        float rimH = depth * 0.35f;
+        float hitMul = 1f + (site.hits - 1) * (huge ? 0.85f : 0.7f);
+        float depth = Mathf.Clamp(depthNorm * hitMul, 0.035f, maxDigDepth);
+        float radius = Mathf.Clamp(radiusNorm * (1f + (site.hits - 1) * 0.1f), 0.05f, 0.42f);
+        float rimH = depth * Mathf.Lerp(0.45f, 0.25f, Mathf.Clamp01((site.hits - 1) / 5f));
+        float minR = Mathf.Lerp(0.32f, minShellRadius, Mathf.Clamp01((site.hits - 1) / 6f));
 
         if (seed == 0)
             seed = HashDir(site.dir) ^ (site.hits * 7919);
 
+        site.dug = Mathf.Min(maxDigDepth, site.dug + depth * 0.55f);
+
         // crust만 변형. Ocean/Clouds는 건드리지 않음 (레이어·투명 이슈 방지).
-        DeformVerticesOnly(workingCrust, site.dir, radius, depth, rimH, seed, minShellRadius);
+        DeformVerticesOnly(workingCrust, site.dir, radius, depth, rimH, seed, minR);
 
         if (!UvLockIntact(workingCrust))
         {
@@ -354,6 +392,9 @@ public class EarthCraterDeform : MonoBehaviour
         }
 
         RefreshCollider();
+        if (site.hits >= 3 || site.dug > 0.14f)
+            RevealCore();
+
         return site.hits;
     }
 
@@ -404,35 +445,337 @@ public class EarthCraterDeform : MonoBehaviour
         RefreshCollider();
     }
 
+    /// <summary>같은 지점 반복 타격 누적 횟수 (없으면 0).</summary>
+    public int GetSiteHitCount(Vector3 worldPoint)
+    {
+        Vector3 local = transform.InverseTransformPoint(worldPoint);
+        if (local.sqrMagnitude < 1e-8f)
+            return 0;
+        var site = FindSite(local.normalized);
+        return site != null ? site.hits : 0;
+    }
+
+    /// <summary>0~1 — 이 지점이 얼마나 깊게 파였는지.</summary>
+    public float GetSiteDepth01(Vector3 worldPoint)
+    {
+        int hits = GetSiteHitCount(worldPoint);
+        return hits <= 0 ? 0f : Mathf.Clamp01((hits - 1) / 9f);
+    }
+
     /// <summary>
     /// 드릴/블랙홀: 림 없이 안쪽으로만. shellFloor가 낮을수록 더 깊은 구멍.
+    /// 같은 지점이면 Pepe 펀치처럼 점점 더 깊게 파인다.
     /// </summary>
-    public void DrillBore(Vector3 worldPoint, float radiusNorm, float depthNorm, float shellFloor)
+    public int DrillBore(Vector3 worldPoint, float radiusNorm, float depthNorm, float shellFloor, bool widenOnRepeat = true)
     {
         EnsureReady();
         if (workingCrust == null || !UvLockIntact(workingCrust))
-            return;
+            return 0;
 
         Vector3 local = transform.InverseTransformPoint(worldPoint);
         if (local.sqrMagnitude < 1e-8f)
-            return;
+            return 0;
 
-        float depth = Mathf.Clamp(depthNorm, 0.02f, 0.28f);
-        float radius = Mathf.Clamp(radiusNorm, 0.05f, 0.34f);
-        float floor = Mathf.Clamp(shellFloor, 0.18f, 0.45f);
+        DigSite site = FindOrCreateSite(local.normalized);
+        site.hits++;
+        site.dir = Vector3.Slerp(site.dir, local.normalized, 0.35f).normalized;
+
+        float hitMul = 1f + (site.hits - 1) * (widenOnRepeat ? 0.38f : 0.58f);
+        float depthCap = maxDigDepth + (widenOnRepeat ? 0.06f : 0.24f);
+        float depth = Mathf.Clamp(depthNorm * hitMul, 0.02f, depthCap);
+        float radius = widenOnRepeat
+            ? Mathf.Clamp(radiusNorm * (1f + (site.hits - 1) * 0.05f), 0.05f, 0.36f)
+            : Mathf.Clamp(radiusNorm * (1f + (site.hits - 1) * 0.012f), 0.04f, 0.24f);
+        float floor = ResolveDigFloor(shellFloor, site.hits, minShellRadius);
+        site.dug = Mathf.Min(maxDigDepth, site.dug + depth * 0.55f);
         digCountSalt++;
-        // rimFrac = 0 → 절대 바깥으로 솟지 않음
-        DeformVerticesOnly(workingCrust, local.normalized, radius, depth, 0f, HashDir(local.normalized) ^ digCountSalt, floor);
+        DeformVerticesOnly(workingCrust, site.dir, radius, depth, 0f, HashDir(site.dir) ^ digCountSalt, floor);
 
         if (!UvLockIntact(workingCrust))
         {
             Debug.LogError("[EarthCraterDeform] DrillBore corrupted UVs.");
             ready = false;
             workingCrust = null;
-            return;
+            return 0;
         }
 
+        if (site.hits >= 3 || site.dug > 0.14f)
+            RevealCore();
+
         RefreshCollider();
+        return site.hits;
+    }
+
+    /// <summary>
+    /// Pepe 펀치 — 한 패스 bore. 바닥 반경(pepeFloorR)은 같은 자리에서 절대 올라가지 않음.
+    ///
+    /// 설계 요약 (EarthCrack):
+    /// - PepeBoreDig: 중심=floorR, rim=현재 vertex 반경 (wallPower로 가파른 shaft).
+    /// - pepeFloorR: DigSite에 저장, 타격마다 Min()으로만 갱신 → 반복 타격 시 더 깊어짐.
+    /// - Mantle 렌더러는 파기 시작 시 숨김(회색 껍질 방지), Core 발광으로 용암 바닥.
+    /// - 텍스처 BurnAt/PaintDeepOreInterior 사용 안 함 — 메시 변형만.
+    /// - MemePepeUnit: DoFlurryPunch/EndFlurry에서 PepePunch(hit, progress) 호출.
+    /// </summary>
+    public int PepePunch(Vector3 worldPoint, float progress01)
+    {
+        EnsureReady();
+        if (workingCrust == null || !UvLockIntact(workingCrust))
+            return 0;
+
+        Vector3 local = transform.InverseTransformPoint(worldPoint);
+        if (local.sqrMagnitude < 1e-8f)
+            return 0;
+
+        DigSite site = FindOrCreateSite(local.normalized);
+        site.hits++;
+        site.dir = Vector3.Slerp(site.dir, local.normalized, 0.4f).normalized;
+
+        progress01 = Mathf.Clamp01(progress01);
+        float shellR = GetTypicalShellRadius();
+        float coreR = shellR * 0.22f;
+        float minFloor = coreR * 0.38f;
+
+        if (site.pepeFloorR <= 0f)
+            site.pepeFloorR = shellR;
+
+        float wantFloor = Mathf.Lerp(shellR * 0.28f, minFloor, progress01);
+        wantFloor -= (site.hits - 1) * shellR * 0.09f;
+        wantFloor = Mathf.Max(minFloor, wantFloor);
+        site.pepeFloorR = Mathf.Min(site.pepeFloorR, wantFloor);
+
+        float mouthRad = Mathf.Lerp(0.074f, 0.11f, progress01);
+        mouthRad *= Mathf.Min(1.2f, 1f + (site.hits - 1) * 0.011f);
+        const float wallPower = 3.45f;
+
+        digCountSalt++;
+        PepeBoreDig(workingCrust, site.dir, mouthRad, site.pepeFloorR, wallPower);
+
+        EnsureMantleReady();
+        if (workingMantle != null && UvLockIntact(workingMantle))
+        {
+            float mantleR = GetTypicalShellRadius(pristineMantleVerts);
+            float mantleFloor = site.pepeFloorR * (mantleR / Mathf.Max(1e-4f, shellR));
+            PepeBoreDig(workingMantle, site.dir, mouthRad * 1.03f, mantleFloor, wallPower * 0.96f);
+            mantleDirty = true;
+        }
+
+        site.dug = (shellR - site.pepeFloorR) / Mathf.Max(1e-4f, shellR);
+
+        if (!UvLockIntact(workingCrust))
+        {
+            ready = false;
+            workingCrust = null;
+            return 0;
+        }
+
+        UpdatePepeBoreVisuals(site.pepeFloorR, shellR, coreR, minFloor);
+        RefreshCollider();
+        return site.hits;
+    }
+
+    static void PepeBoreDig(Mesh mesh, Vector3 axis, float mouthRad, float floorR, float wallPower)
+    {
+        if (mesh == null || mouthRad < 1e-5f)
+            return;
+
+        axis = axis.normalized;
+        var verts = mesh.vertices;
+        bool changed = false;
+
+        for (int i = 0; i < verts.Length; i++)
+        {
+            Vector3 v = verts[i];
+            float len = v.magnitude;
+            if (len < 1e-6f)
+                continue;
+
+            Vector3 n = v / len;
+            float ang = Mathf.Acos(Mathf.Clamp(Vector3.Dot(n, axis), -1f, 1f));
+            if (ang > mouthRad)
+                continue;
+
+            float t = ang / mouthRad;
+            float goal = Mathf.Lerp(floorR, len, Mathf.Pow(t, wallPower));
+            if (goal >= len - 1e-6f)
+                continue;
+
+            verts[i] = n * goal;
+            changed = true;
+        }
+
+        if (!changed)
+            return;
+
+        mesh.vertices = verts;
+        mesh.RecalculateBounds();
+    }
+
+    void UpdatePepeBoreVisuals(float floorR, float shellR, float coreR, float minFloor)
+    {
+        Transform mantle = transform.Find("Mantle");
+        if (mantle != null)
+        {
+            var rend = mantle.GetComponent<Renderer>();
+            if (rend != null)
+            {
+                if (mantleOriginalMat == null)
+                    mantleOriginalMat = rend.sharedMaterial;
+                rend.enabled = floorR >= shellR * 0.97f;
+            }
+        }
+
+        RevealCoreForPepe(floorR, shellR, coreR, minFloor);
+    }
+
+    void RestorePepeBoreVisuals()
+    {
+        mantleOriginalMat = null;
+
+        Transform mantle = transform.Find("Mantle");
+        if (mantle != null)
+        {
+            var rend = mantle.GetComponent<Renderer>();
+            if (rend != null)
+                rend.enabled = true;
+        }
+
+        Transform core = transform.Find("Core");
+        if (core != null)
+        {
+            var rend = core.GetComponent<Renderer>();
+            if (rend != null)
+                rend.SetPropertyBlock(null);
+        }
+    }
+
+    static bool IsDecorLayerMesh(MeshFilter mf)
+    {
+        string n = mf.gameObject.name;
+        return n.IndexOf("Cloud", System.StringComparison.OrdinalIgnoreCase) >= 0
+            || n.IndexOf("Ocean", System.StringComparison.OrdinalIgnoreCase) >= 0
+            || n.IndexOf("Atmos", System.StringComparison.OrdinalIgnoreCase) >= 0
+            || n.IndexOf("Aurora", System.StringComparison.OrdinalIgnoreCase) >= 0
+            || n.IndexOf("Halo", System.StringComparison.OrdinalIgnoreCase) >= 0;
+    }
+
+    void RevealCoreForPepe(float floorR, float shellR, float coreR, float minFloor)
+    {
+        Transform core = transform.Find("Core");
+        if (core == null)
+            return;
+
+        core.gameObject.SetActive(true);
+
+        float span = Mathf.Max(1e-4f, shellR - minFloor);
+        float dug01 = Mathf.Clamp01((shellR - floorR) / span);
+        core.localScale = Vector3.one * Mathf.Lerp(0.24f, 0.68f, dug01);
+
+        var rend = core.GetComponent<Renderer>();
+        if (rend != null)
+        {
+            var mpb = new MaterialPropertyBlock();
+            rend.GetPropertyBlock(mpb);
+            float glow = Mathf.Lerp(1.2f, 4f, dug01);
+            mpb.SetColor("_EmissionColor", new Color(1.5f, 0.42f, 0.07f) * glow);
+            if (rend.sharedMaterial != null && rend.sharedMaterial.HasProperty("_Color"))
+                mpb.SetColor("_Color", Color.Lerp(new Color(0.55f, 0.22f, 0.1f), new Color(1f, 0.38f, 0.08f), dug01));
+            rend.SetPropertyBlock(mpb);
+        }
+    }
+
+    void EnsureMantleReady()
+    {
+        if (workingMantle != null)
+            return;
+
+        if (mantleFilter == null)
+        {
+            Transform mantle = transform.Find("Mantle");
+            if (mantle != null)
+                mantleFilter = mantle.GetComponent<MeshFilter>();
+        }
+
+        if (mantleFilter == null || mantleFilter.sharedMesh == null)
+            return;
+
+        workingMantle = CloneWritableMeshPreserveUv(mantleFilter, "EarthMantleDeform");
+        if (workingMantle == null)
+            return;
+
+        pristineMantleVerts = workingMantle.vertices;
+    }
+
+    void ResolveCrustFilter()
+    {
+        if (crustFilter != null)
+            return;
+
+        crustFilter = GetComponent<MeshFilter>();
+        if (crustFilter != null && crustFilter.sharedMesh != null)
+            return;
+
+        var planet = GetComponent<EarthPlanet>();
+        if (planet != null && planet.CrustRenderer != null)
+        {
+            crustFilter = planet.CrustRenderer.GetComponent<MeshFilter>();
+            if (crustFilter != null && crustFilter.sharedMesh != null)
+                return;
+        }
+
+        MeshFilter best = null;
+        int bestVerts = 0;
+        var filters = GetComponentsInChildren<MeshFilter>(true);
+        for (int i = 0; i < filters.Length; i++)
+        {
+            var mf = filters[i];
+            if (mf == null || mf.sharedMesh == null || IsDecorLayerMesh(mf))
+                continue;
+            int vc = mf.sharedMesh.vertexCount;
+            if (vc > bestVerts)
+            {
+                bestVerts = vc;
+                best = mf;
+            }
+        }
+
+        crustFilter = best;
+    }
+
+    float GetTypicalShellRadius()
+    {
+        return GetTypicalShellRadius(pristineVerts);
+    }
+
+    static float GetTypicalShellRadius(Vector3[] verts)
+    {
+        if (verts != null && verts.Length > 0)
+        {
+            float sum = 0f;
+            int count = 0;
+            int step = Mathf.Max(1, verts.Length / 64);
+            for (int i = 0; i < verts.Length; i += step)
+            {
+                sum += verts[i].magnitude;
+                count++;
+            }
+
+            if (count > 0)
+                return sum / count;
+        }
+
+        return 0.5f;
+    }
+
+    /// <summary>깊게 파이면 안쪽 Mantle/Core 레이어가 보이도록.</summary>
+    void RevealCore()
+    {
+        Transform mantle = transform.Find("Mantle");
+        if (mantle != null && !mantle.gameObject.activeSelf)
+            mantle.gameObject.SetActive(true);
+
+        Transform core = transform.Find("Core");
+        if (core != null && !core.gameObject.activeSelf)
+            core.gameObject.SetActive(true);
     }
 
     /// <summary>의도적 스파이크: 지표가 밖으로 삐죽 솟아오름.</summary>
@@ -474,7 +817,7 @@ public class EarthCraterDeform : MonoBehaviour
         return mesh != null && mesh.vertexCount == lockedVertexCount && lockedUvCount == lockedVertexCount;
     }
 
-    DigSite FindOrCreateSite(Vector3 dir)
+    DigSite FindSite(Vector3 dir)
     {
         float mergeCos = Mathf.Cos(mergeAngleDeg * Mathf.Deg2Rad);
         DigSite best = null;
@@ -488,8 +831,14 @@ public class EarthCraterDeform : MonoBehaviour
                 best = sites[i];
             }
         }
-        if (best != null)
-            return best;
+        return best;
+    }
+
+    DigSite FindOrCreateSite(Vector3 dir)
+    {
+        var existing = FindSite(dir);
+        if (existing != null)
+            return existing;
 
         var created = new DigSite { dir = dir, hits = 0 };
         sites.Add(created);
@@ -507,17 +856,29 @@ public class EarthCraterDeform : MonoBehaviour
 
     void LateUpdate()
     {
-        if (!meshDirty || workingCrust == null)
-            return;
-        meshDirty = false;
-
-        workingCrust.RecalculateNormals();
-
-        var col = GetComponent<MeshCollider>();
-        if (col != null)
+        if (workingCrust != null && meshDirty)
         {
-            col.sharedMesh = null;
-            col.sharedMesh = workingCrust;
+            meshDirty = false;
+            workingCrust.RecalculateNormals();
+
+            if (crustFilter != null && crustFilter.sharedMesh != workingCrust)
+                crustFilter.mesh = workingCrust;
+
+            var col = GetComponent<MeshCollider>();
+            if (col != null)
+            {
+                col.sharedMesh = null;
+                col.sharedMesh = workingCrust;
+            }
+        }
+
+        if (workingMantle != null && mantleDirty)
+        {
+            mantleDirty = false;
+            workingMantle.RecalculateNormals();
+
+            if (mantleFilter != null && mantleFilter.sharedMesh != workingMantle)
+                mantleFilter.mesh = workingMantle;
         }
     }
 
@@ -528,6 +889,15 @@ public class EarthCraterDeform : MonoBehaviour
         float b = Mathf.PerlinNoise(n.y * frequency + seed + 31.4f, n.z * frequency + seed + 17.7f);
         float c = Mathf.PerlinNoise(n.z * frequency + seed + 57.2f, n.x * frequency + seed + 91.3f);
         return (a + b + c) / 3f;
+    }
+
+    /// <summary>반복 타격 시 바닥 반경을 점점 낮춰 지구 안쪽으로 깊게 파낸다.</summary>
+    static float ResolveDigFloor(float shellFloor, int hits, float minShell)
+    {
+        float start = Mathf.Max(shellFloor, 0.32f);
+        float progressive = Mathf.Lerp(start, minShell, Mathf.Clamp01((hits - 1) / 6f));
+        float stepped = shellFloor - (hits - 1) * 0.028f;
+        return Mathf.Clamp(Mathf.Min(progressive, stepped), minShell, 0.45f);
     }
 
     static int HashDir(Vector3 d)
@@ -543,7 +913,8 @@ public class EarthCraterDeform : MonoBehaviour
 
     /// <summary>vertices만 이동. uv/triangles/normals 레이아웃 교체 금지.</summary>
     static void DeformVerticesOnly(
-        Mesh mesh, Vector3 impactDir, float craterAngle, float depthFrac, float rimFrac, int seed, float minRadius)
+        Mesh mesh, Vector3 impactDir, float craterAngle, float depthFrac, float rimFrac, int seed, float minRadius,
+        bool deepBore = false)
     {
         var rng = new System.Random(seed);
         float stretchA = Mathf.Lerp(0.75f, 1.25f, (float)rng.NextDouble());
@@ -603,11 +974,13 @@ public class EarthCraterDeform : MonoBehaviour
             float radialDelta = 0f;
             if (t <= 1f)
             {
-                // 넓고 평평한 바닥 + 가파른 벽 (매끈한 눌림 방지)
-                float wall = 1f - Mathf.SmoothStep(0.45f, 1f, t);
+                float wallSteep = deepBore ? 0.26f : 0.38f;
+                float boostPeak = deepBore ? 2.1f : 1.45f;
+                float wall = 1f - Mathf.SmoothStep(wallSteep, 1f, t);
+                float centerBoost = Mathf.Lerp(boostPeak, 1f, t);
                 float floorRough = 1f + 0.35f * (SurfaceNoise(n, 22f, noiseSeed + 5.3f) - 0.5f);
                 float asym = 1f + 0.15f * Mathf.Sin(phi + p1);
-                radialDelta -= depthFrac * len * wall * floorRough * depthBias * asym;
+                radialDelta -= depthFrac * len * wall * floorRough * depthBias * asym * centerBoost;
 
                 if (rimFrac > 1e-5f)
                 {

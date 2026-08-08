@@ -11,7 +11,8 @@ public enum StrikeImpactKind
     UfoPop,
     MemeStomp,
     MemeSoldier,
-    MemeTariffShot
+    MemeTariffShot,
+    OrePunch
 }
 
 public enum MemeBurstStyle
@@ -58,6 +59,7 @@ public static class StrikeImpactFx
             StrikeImpactKind.BattleshipBeam => 0.8f,
             StrikeImpactKind.UfoPop => 0.95f,
             StrikeImpactKind.MemeSoldier => 0.55f,
+            StrikeImpactKind.OrePunch => 0.28f,
             _ => 0.5f
         };
         if (intensity < threshold)
@@ -69,6 +71,7 @@ public static class StrikeImpactFx
             StrikeImpactKind.BattleshipBeam => 0.05f,
             StrikeImpactKind.PlanetKiller => 0.09f,
             StrikeImpactKind.MemeStomp => 0.11f,
+            StrikeImpactKind.OrePunch => 0.13f,
             StrikeImpactKind.MemeTariffShot => 0.13f,
             StrikeImpactKind.FighterStrafe => 0.035f,
             StrikeImpactKind.VonNeumannProbe => 0.03f,
@@ -85,6 +88,7 @@ public static class StrikeImpactFx
             StrikeImpactKind.PlanetKiller => 0.034f,
             StrikeImpactKind.VonNeumannProbe => 0.016f,
             StrikeImpactKind.MemeStomp => 0.026f,
+            StrikeImpactKind.OrePunch => 0.038f,
             StrikeImpactKind.UfoPop => 0.02f,
             _ => 0.022f
         }) * intensity;
@@ -98,6 +102,7 @@ public static class StrikeImpactFx
         StrikeImpactKind.VonNeumannProbe => new Color(0.55f, 0.85f, 1f, 0.45f),
         StrikeImpactKind.UfoPop => new Color(0.45f, 0.92f, 1f, 0.55f),
         StrikeImpactKind.MemeStomp => new Color(0.35f, 0.72f, 1f, 0.48f),
+        StrikeImpactKind.OrePunch => new Color(1f, 0.42f, 0.06f, 0.62f),
         StrikeImpactKind.MemeSoldier => new Color(0.92f, 0.72f, 0.38f, 0.45f),
         StrikeImpactKind.MemeTariffShot => new Color(1f, 0.42f, 0.08f, 0.5f),
         _ => new Color(1f, 0.72f, 0.28f, 0.5f)
@@ -110,6 +115,7 @@ public static class StrikeImpactFx
         StrikeImpactKind.PlanetKiller => 0.04f + intensity * 0.05f,
         StrikeImpactKind.VonNeumannProbe => 0.008f + intensity * 0.012f,
         StrikeImpactKind.MemeStomp => 0.024f + intensity * 0.028f,
+        StrikeImpactKind.OrePunch => 0.038f + intensity * 0.048f,
         StrikeImpactKind.FighterStrafe => 0.012f + intensity * 0.018f,
         _ => 0.016f + intensity * 0.024f
     };
@@ -117,6 +123,7 @@ public static class StrikeImpactFx
     static float ShakeDur(StrikeImpactKind kind, float intensity) => kind switch
     {
         StrikeImpactKind.MemeStomp => 0.03f + intensity * 0.03f,
+        StrikeImpactKind.OrePunch => 0.04f + intensity * 0.038f,
         StrikeImpactKind.FighterStrafe => 0.02f + intensity * 0.025f,
         _ => 0.024f + intensity * 0.032f
     };
@@ -129,6 +136,7 @@ public static class StrikeImpactFx
         StrikeImpactKind.PlanetKiller => 0.014f * intensity,
         StrikeImpactKind.VonNeumannProbe => 0.005f * intensity,
         StrikeImpactKind.MemeStomp => 0.016f * intensity,
+        StrikeImpactKind.OrePunch => 0.012f * intensity,
         StrikeImpactKind.MemeTariffShot => 0.018f * intensity,
         _ => 0.006f * intensity
     };
@@ -137,6 +145,7 @@ public static class StrikeImpactFx
     {
         StrikeImpactKind.UfoPop => 0.35f,
         StrikeImpactKind.MemeStomp => 0.38f,
+        StrikeImpactKind.OrePunch => 0.52f,
         StrikeImpactKind.MemeSoldier => 0.48f,
         _ => 0.42f
     };

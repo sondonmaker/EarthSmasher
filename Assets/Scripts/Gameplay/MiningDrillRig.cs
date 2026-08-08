@@ -1,16 +1,16 @@
 using UnityEngine;
 
 /// <summary>
-/// 클릭 지점에 드릴 소환 → 회전하며 지표를 안쪽으로 뚫음.
-/// (용암 스피어/풍선 없음 — DrillBore만 사용)
+/// Soviet 거대 드릴 — 표면에 수직으로 서 있고, 옛 Pepe 펀치처럼 메시만 깊게 파냄 (폭발 없음).
 /// </summary>
 public class MiningDrillRig : MonoBehaviour
 {
     EarthPlanet earth;
     Vector3 point;
     Vector3 normal;
-    Transform bit;
-    Transform shaft;
+    Transform[] spinParts;
+    Quaternion[] spinBase;
+    float mountOffset;
     float age;
     float life = 12f;
     float digInterval = 0.2f;
@@ -23,7 +23,6 @@ public class MiningDrillRig : MonoBehaviour
         if (earth == null)
             return;
 
-        // 이전 잘못된 용암 풍선 정리
         for (int i = earth.transform.childCount - 1; i >= 0; i--)
         {
             var ch = earth.transform.GetChild(i);
@@ -42,54 +41,92 @@ public class MiningDrillRig : MonoBehaviour
         normal = worldNormal.normalized;
         point = earth.transform.position + normal * earth.Radius;
 
-        // 드릴 크기는 지구 대비 작게 (월드 단위)
-        float R = earth.Radius;
-        float unit = R * 0.045f;
-
-        transform.position = point + normal * (unit * 2.2f);
+        // +Y = 지구 밖(법선), 드릴 비트는 표면(y≈0), 몸통은 +Y
         transform.rotation = Quaternion.FromToRotation(Vector3.up, normal);
 
-        var shaftGo = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
-        Object.Destroy(shaftGo.GetComponent<Collider>());
-        shaftGo.name = "Shaft";
-        shaftGo.transform.SetParent(transform, false);
-        shaftGo.transform.localPosition = new Vector3(0f, unit * 1.6f, 0f);
-        shaftGo.transform.localScale = new Vector3(unit * 0.55f, unit * 1.5f, unit * 0.55f);
-        shaftGo.GetComponent<Renderer>().material = RuntimeMaterial.Opaque(
-            new Color(0.4f, 0.42f, 0.46f), 0.2f);
-        shaft = shaftGo.transform;
+        var visual = MiningDrillVisuals.TryBuild(transform, earth.Radius);
+        if (visual.root != null)
+        {
+            spinParts = visual.spinParts;
+            mountOffset = ComputeMountOffset(visual.root);
+        }
+        else
+        {
+            BuildFallbackVisual(earth.Radius);
+            Debug.LogWarning("[MiningDrill] Soviet drill prefab missing — primitive fallback.");
+        }
+
+        CacheSpinBase();
+        PlaceOnSurface();
+        nextDig = 0.08f;
+        CameraShake.Shake(0.04f, 0.08f);
+        BoreOnce(0f);
+    }
+
+    float ComputeMountOffset(Transform visualRoot)
+    {
+        var renderers = visualRoot.GetComponentsInChildren<Renderer>(true);
+        if (renderers.Length == 0)
+            return earth.Radius * 0.002f;
+
+        float maxY = 0f;
+        for (int i = 0; i < renderers.Length; i++)
+        {
+            var b = renderers[i].bounds;
+            Vector3 topLocal = transform.InverseTransformPoint(b.max);
+            maxY = Mathf.Max(maxY, topLocal.y);
+        }
+
+        // 부모 원점 = 표면 접점, 몸통이 +Y로 솟음
+        return earth.Radius * 0.0015f;
+    }
+
+    void BuildFallbackVisual(float earthRadius)
+    {
+        float unit = earthRadius * 0.13f;
+        mountOffset = earthRadius * 0.0015f;
+
+        var body = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
+        Object.Destroy(body.GetComponent<Collider>());
+        body.name = "DrillBody";
+        body.transform.SetParent(transform, false);
+        body.transform.localPosition = new Vector3(0f, unit * 1.05f, 0f);
+        body.transform.localScale = new Vector3(unit * 0.7f, unit * 1.05f, unit * 0.7f);
+        body.GetComponent<Renderer>().material = RuntimeMaterial.Opaque(new Color(0.72f, 0.22f, 0.1f), 0.05f);
 
         var bitGo = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
         Object.Destroy(bitGo.GetComponent<Collider>());
         bitGo.name = "Bit";
         bitGo.transform.SetParent(transform, false);
-        bitGo.transform.localPosition = new Vector3(0f, -unit * 0.2f, 0f);
-        bitGo.transform.localScale = new Vector3(unit * 1.1f, unit * 0.9f, unit * 1.1f);
-        bitGo.GetComponent<Renderer>().material = RuntimeMaterial.Opaque(
-            new Color(0.55f, 0.55f, 0.58f), 0.35f);
-        bit = bitGo.transform;
-
-        var tip = GameObject.CreatePrimitive(PrimitiveType.Sphere);
-        Object.Destroy(tip.GetComponent<Collider>());
-        tip.name = "Tip";
-        tip.transform.SetParent(bit, false);
-        tip.transform.localPosition = new Vector3(0f, -0.55f, 0f);
-        tip.transform.localScale = new Vector3(0.85f, 0.55f, 0.85f);
-        tip.GetComponent<Renderer>().material = RuntimeMaterial.Opaque(
-            new Color(0.7f, 0.45f, 0.15f), 0.8f);
+        bitGo.transform.localPosition = new Vector3(0f, -unit * 0.18f, 0f);
+        bitGo.transform.localScale = new Vector3(unit * 0.55f, unit * 0.22f, unit * 0.55f);
+        bitGo.GetComponent<Renderer>().material = RuntimeMaterial.Opaque(new Color(0.55f, 0.55f, 0.58f), 0.15f);
 
         var head = GameObject.CreatePrimitive(PrimitiveType.Cube);
         Object.Destroy(head.GetComponent<Collider>());
         head.name = "Motor";
         head.transform.SetParent(transform, false);
-        head.transform.localPosition = new Vector3(0f, unit * 3.4f, 0f);
-        head.transform.localScale = new Vector3(unit * 1.6f, unit * 0.9f, unit * 1.6f);
-        head.GetComponent<Renderer>().material = RuntimeMaterial.Opaque(
-            new Color(0.22f, 0.24f, 0.28f), 0.1f);
+        head.transform.localPosition = new Vector3(0f, unit * 2.35f, 0f);
+        head.transform.localScale = new Vector3(unit * 1.1f, unit * 0.65f, unit * 1.1f);
+        head.GetComponent<Renderer>().material = RuntimeMaterial.Opaque(new Color(0.22f, 0.24f, 0.28f), 0.1f);
 
-        nextDig = 0.08f;
-        CameraShake.Shake(0.04f, 0.08f);
-        BoreOnce(0f);
+        spinParts = new[] { bitGo.transform };
+    }
+
+    void CacheSpinBase()
+    {
+        if (spinParts == null || spinParts.Length == 0)
+            return;
+
+        spinBase = new Quaternion[spinParts.Length];
+        for (int i = 0; i < spinParts.Length; i++)
+            spinBase[i] = spinParts[i] != null ? spinParts[i].localRotation : Quaternion.identity;
+    }
+
+    void PlaceOnSurface()
+    {
+        // 드릴은 지구 밖에 서 있음 — 안으로 가라앉히지 않음
+        transform.position = point + normal * mountOffset;
     }
 
     void Update()
@@ -102,20 +139,19 @@ public class MiningDrillRig : MonoBehaviour
 
         age += Time.deltaTime;
         float u = Mathf.Clamp01(age / life);
-        spin += Time.deltaTime * (900f + digCount * 40f);
+        spin += Time.deltaTime * (820f + digCount * 30f);
 
-        float R = earth.Radius;
-        float unit = R * 0.045f;
-        // 파고들수록 드릴이 지표 아래로
-        float sink = u * (R * 0.14f);
-        transform.position = point + normal * (unit * 2.0f - sink);
+        PlaceOnSurface();
 
-        if (bit != null)
-            bit.localRotation = Quaternion.Euler(0f, spin, 0f);
-        if (shaft != null)
-            shaft.localRotation = Quaternion.Euler(0f, spin * 0.85f, 0f);
-
-        transform.position += normal * (Mathf.Sin(age * 70f) * unit * 0.08f);
+        if (spinParts != null && spinBase != null)
+        {
+            var spinRot = Quaternion.AngleAxis(spin, Vector3.up);
+            for (int i = 0; i < spinParts.Length; i++)
+            {
+                if (spinParts[i] != null)
+                    spinParts[i].localRotation = spinBase[i] * spinRot;
+            }
+        }
 
         if (age >= nextDig)
         {
@@ -126,24 +162,37 @@ public class MiningDrillRig : MonoBehaviour
         if (age >= life)
         {
             BoreOnce(1f);
-            CameraShake.Shake(0.1f, 0.14f);
+            ApplyFinisherDig();
+            CameraShake.Shake(0.1f, 0.12f);
             Destroy(gameObject);
         }
     }
 
+    /// <summary>옛 Pepe 펀치 — DrillBore + 그을음, 폭발/먼지 없음.</summary>
     void BoreOnce(float progress)
     {
         digCount++;
-        // 안쪽으로만 — 풍선/림 없음
-        float rad = Mathf.Lerp(0.09f, 0.24f, progress);
-        float depth = Mathf.Lerp(0.06f, 0.24f, progress);
-        float floor = Mathf.Lerp(0.32f, 0.2f, progress);
-
         var deform = EarthCraterDeform.Ensure(earth);
-        if (deform != null)
-            deform.DrillBore(point, rad, depth, floor);
+        int priorHits = deform != null ? deform.GetSiteHitCount(point) : 0;
 
-        EarthSurfaceScorch.Ensure(earth)?.BurnAt(point, rad * 0.85f, 0.7f);
+        float rad = Mathf.Lerp(0.06f, 0.22f, progress) + priorHits * 0.006f;
+        float depth = Mathf.Lerp(0.05f, 0.28f, progress) + priorHits * 0.034f;
+        float floor = Mathf.Lerp(0.34f, 0.16f, progress) - priorHits * 0.024f;
+        floor = Mathf.Max(floor, 0.1f);
+
+        if (deform != null)
+            deform.DrillBore(point, rad, depth, floor, widenOnRepeat: false);
+
+        EarthSurfaceScorch.Ensure(earth)?.BurnAt(point, rad * 0.75f, 0.55f + progress * 0.25f);
+
+        float depth01 = deform != null ? deform.GetSiteDepth01(point) : progress;
+        if (depth01 > 0.18f && digCount % 3 == 0)
+        {
+            var scorch = EarthSurfaceScorch.Ensure(earth);
+            scorch?.PaintDeepOreInterior(point, rad * 0.85f, depth01, point.GetHashCode() ^ digCount, lite: depth01 < 0.5f);
+            if (depth01 > 0.55f && digCount % 6 == 0)
+                scorch?.FlushTexture();
+        }
 
         if (digCount % 4 == 0)
         {
@@ -155,7 +204,7 @@ public class MiningDrillRig : MonoBehaviour
                 0.55f);
         }
 
-        if (digCount >= 10)
+        if (priorHits + 1 >= 10)
         {
             var core = earth.transform.Find("Core");
             if (core != null)
@@ -163,6 +212,17 @@ public class MiningDrillRig : MonoBehaviour
         }
 
         if (digCount % 3 == 0)
-            CameraShake.Shake(0.025f, 0.04f);
+            CameraShake.Shake(0.022f + progress * 0.028f, 0.038f);
+    }
+
+    void ApplyFinisherDig()
+    {
+        var deform = EarthCraterDeform.Ensure(earth);
+        deform?.DrillBore(point, 0.24f, 0.3f, 0.15f, widenOnRepeat: false);
+
+        float depth01 = deform != null ? Mathf.Max(0.7f, deform.GetSiteDepth01(point)) : 0.85f;
+        var scorch = EarthSurfaceScorch.Ensure(earth);
+        scorch?.PaintDeepOreInterior(point, 0.2f, depth01, 991);
+        scorch?.FlushTexture();
     }
 }

@@ -38,11 +38,13 @@ public static class EarthTextureLoader
             if (night != null)
                 mat.SetTexture("_NightTex", night);
             mat.color = Color.white;
-            mat.SetFloat("_Exposure", 1.05f);
-            mat.SetFloat("_Contrast", 1.05f);
-            mat.SetFloat("_Terminator", 0.22f);
-            mat.SetFloat("_NightIntensity", 1.0f);
-            mat.SetFloat("_AmbientFloor", 0.05f);
+            mat.SetFloat("_Exposure", 1.18f);
+            mat.SetFloat("_Contrast", 1.02f);
+            mat.SetFloat("_Terminator", 0.32f);
+            mat.SetFloat("_NightIntensity", 0.95f);
+            mat.SetFloat("_AmbientFloor", 0.16f);
+            mat.SetFloat("_NightSideFill", 0.46f);
+            mat.SetFloat("_RimBoost", 0.12f);
             return mat;
         }
 
@@ -63,6 +65,25 @@ public static class EarthTextureLoader
             fb.SetColor("_EmissionColor", new Color(1.1f, 1f, 0.85f) * 0.45f);
         }
         return fb;
+    }
+
+    /// <summary>씬에 이미 있는 지구도 Play 시 밝기/가독성 값을 맞춘다.</summary>
+    public static void ApplyReadableLighting(Renderer crustRenderer)
+    {
+        if (crustRenderer == null)
+            return;
+
+        var mat = crustRenderer.sharedMaterial;
+        if (mat == null || mat.shader == null || !mat.shader.name.Contains("EarthFromSpace"))
+            return;
+
+        mat.SetFloat("_Exposure", 1.18f);
+        mat.SetFloat("_Contrast", 1.02f);
+        mat.SetFloat("_Terminator", 0.32f);
+        mat.SetFloat("_NightIntensity", 0.95f);
+        mat.SetFloat("_AmbientFloor", 0.16f);
+        mat.SetFloat("_NightSideFill", 0.46f);
+        mat.SetFloat("_RimBoost", 0.12f);
     }
 
     public static Material CreateCloudMaterial()
@@ -110,13 +131,57 @@ public static class EarthTextureLoader
     /// <summary>보조 구름층 (옵션).</summary>
     public static Material CreateCloudDetailMaterial() => CreateCloudMaterial();
 
+    /// <summary>지각 아래 맨틀/광석층 — 파였을 때 노란 코어 대신 보이는 단면.</summary>
+    public static Material CreateMantleMaterial()
+    {
+        return CreateOreInteriorMaterial(mantleLayer: true);
+    }
+
+    /// <summary>중심부 — 작은 고온 핵. 겉은 암석, 깊을수록만 약하게 발광.</summary>
     public static Material CreateCoreMaterial()
     {
+        return CreateOreInteriorMaterial(mantleLayer: false);
+    }
+
+    static Material CreateOreInteriorMaterial(bool mantleLayer)
+    {
         var mat = new Material(SafeShader("Standard"));
-        mat.color = new Color(1f, 0.28f, 0.04f);
+        var rock = Resources.Load<Texture2D>("Impact/rock_color");
+        var lava = Resources.Load<Texture2D>("Impact/lava_color");
+        var lavaEmit = Resources.Load<Texture2D>("Impact/lava_emission");
+
+        if (rock != null)
+        {
+            mat.mainTexture = rock;
+            if (mat.HasProperty("_BaseMap"))
+                mat.SetTexture("_BaseMap", rock);
+            float tile = mantleLayer ? 3.5f : 4.2f;
+            mat.mainTextureScale = new Vector2(tile, tile);
+            mat.mainTextureOffset = new Vector2(0.17f, 0.23f);
+        }
+
+        mat.color = mantleLayer
+            ? new Color(0.38f, 0.32f, 0.28f)
+            : new Color(0.32f, 0.26f, 0.22f);
+
+        if (mat.HasProperty("_Glossiness"))
+            mat.SetFloat("_Glossiness", mantleLayer ? 0.12f : 0.22f);
+        if (mat.HasProperty("_Smoothness"))
+            mat.SetFloat("_Smoothness", mantleLayer ? 0.12f : 0.22f);
+        if (mat.HasProperty("_Metallic"))
+            mat.SetFloat("_Metallic", mantleLayer ? 0.18f : 0.28f);
+
         mat.EnableKeyword("_EMISSION");
-        mat.SetColor("_EmissionColor", new Color(1f, 0.45f, 0.08f) * 4.5f);
-        mat.SetFloat("_Glossiness", 0.7f);
+        if (lavaEmit != null && mat.HasProperty("_EmissionMap"))
+            mat.SetTexture("_EmissionMap", lavaEmit);
+        else if (lava != null && mat.HasProperty("_EmissionMap"))
+            mat.SetTexture("_EmissionMap", lava);
+
+        // 광석 틈새 용암 — flat 노랑 금지
+        Color emit = mantleLayer
+            ? new Color(0.42f, 0.14f, 0.05f) * 0.35f
+            : new Color(0.55f, 0.18f, 0.06f) * 0.55f;
+        mat.SetColor("_EmissionColor", emit);
         return mat;
     }
 

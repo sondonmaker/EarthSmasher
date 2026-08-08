@@ -136,7 +136,8 @@ public class WeaponRailPanel : MonoBehaviour
                     SubOf("shower", "S", "Meteor Shower", ShowerBusy),
                     SubOf("moon_crash", "O", "Moon Crash", MoonBusy),
                     SubOf("blackhole", "B", "Black Hole"),
-                    SubOf("vortex", "V", "Vortex")
+                    SubOf("vortex", "V", "Vortex"),
+                    SubOf("ore_punch", "O", "Ore Punch")
                 }
             },
             new Cat
@@ -151,7 +152,7 @@ public class WeaponRailPanel : MonoBehaviour
                     SubOf("antimatter", "A", "Antimatter"),
                     SubOf("guided", "G", "Guided Missile"),
                     SubOf("fusion", "2", "Fusion Core"),
-                    SubOf("drill", "D", "Mining Drill")
+                    SubOf("drill", "D", "Soviet Drill")
                 }
             },
             new Cat
@@ -575,6 +576,13 @@ public class WeaponRailPanel : MonoBehaviour
             case "vortex":
                 CosmicAnomalySystem.Ensure().SpawnAt(CosmicAnomalyKind.Vortex, point, normal);
                 break;
+            case "ore_punch":
+            {
+                var oreEarth = FindObjectOfType<EarthPlanet>();
+                if (oreEarth != null)
+                    OrePunchEffect.ApplyBoom(oreEarth, point, normal);
+                break;
+            }
             case "nuke_missile":
                 NuclearMissileStrike.Ensure().FireAtKind(NukeStrikeKind.Nuclear, point, normal);
                 break;

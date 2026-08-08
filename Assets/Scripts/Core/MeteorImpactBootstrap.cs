@@ -31,6 +31,8 @@ public class MeteorImpactBootstrap : MonoBehaviour
         EarthPlanet earth = FindObjectOfType<EarthPlanet>();
         if (earth == null)
             earth = CreateEarth();
+        else
+            EarthTextureLoader.ApplyReadableLighting(earth.CrustRenderer);
 
         Camera cam = Camera.main;
         if (cam == null)
@@ -143,24 +145,33 @@ public class MeteorImpactBootstrap : MonoBehaviour
             sun.type = LightType.Directional;
         }
 
-        // 우주: 강한 단일 태양광 + 거의 없는 앰비언트 (= 달에서 본 지구)
+        // 우주: 태양광 + 약한 필 라이트 — 어느 각도에서도 대륙/바다가 보이게
         sun.color = new Color(1f, 0.98f, 0.94f);
-        sun.intensity = 2.1f;
+        sun.intensity = 2.35f;
         sun.shadows = LightShadows.Soft;
-        sun.shadowStrength = 0.85f;
+        sun.shadowStrength = 0.65f;
         sun.transform.rotation = Quaternion.Euler(32f, -52f, 0f);
 
         var fillGo = GameObject.Find("FillLight");
-        if (fillGo != null)
+        if (fillGo == null)
         {
-            var fill = fillGo.GetComponent<Light>();
-            if (fill != null)
-                fill.intensity = 0.04f; // 거의 끄기 — 씻김 방지
+            fillGo = new GameObject("FillLight");
+            fillGo.AddComponent<Light>();
+        }
+
+        var fill = fillGo.GetComponent<Light>();
+        if (fill != null)
+        {
+            fill.type = LightType.Directional;
+            fill.color = new Color(0.72f, 0.8f, 1f);
+            fill.intensity = 0.52f;
+            fill.shadows = LightShadows.None;
+            fill.transform.rotation = Quaternion.Euler(-24f, 138f, 8f);
         }
 
         RenderSettings.ambientMode = UnityEngine.Rendering.AmbientMode.Flat;
-        RenderSettings.ambientLight = new Color(0.012f, 0.014f, 0.022f);
-        RenderSettings.reflectionIntensity = 0.15f;
+        RenderSettings.ambientLight = new Color(0.06f, 0.07f, 0.1f);
+        RenderSettings.reflectionIntensity = 0.22f;
         RenderSettings.fog = false;
     }
 
@@ -177,6 +188,7 @@ public class MeteorImpactBootstrap : MonoBehaviour
         rend.material = EarthTextureLoader.CreateCrustMaterial(earthDayTexture, earthNightTexture);
         rend.receiveShadows = true;
 
+        var _mantle = CreateInteriorSphere(earthGo.transform, "Mantle", 0.936f, EarthTextureLoader.CreateMantleMaterial());
         var core = CreateCoreSphere(earthGo.transform);
 
         var ocean = CreateLayerSphere("Ocean", earthGo.transform, 1.006f, EarthTextureLoader.CreateOceanMaterial(), false);
@@ -193,14 +205,30 @@ public class MeteorImpactBootstrap : MonoBehaviour
         return FinishEarthSetup(earthGo, rend, core, ocean, clouds, atmosphere, aurora);
     }
 
+    static Transform CreateInteriorSphere(Transform parent, string name, float localScale, Material mat)
+    {
+        var go = GameObject.CreatePrimitive(PrimitiveType.Sphere);
+        go.name = name;
+        go.transform.SetParent(parent, false);
+        go.transform.localScale = Vector3.one * localScale;
+        Object.Destroy(go.GetComponent<Collider>());
+        var rend = go.GetComponent<Renderer>();
+        rend.material = mat;
+        rend.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+        rend.receiveShadows = true;
+        return go.transform;
+    }
+
     static Transform CreateCoreSphere(Transform parent)
     {
         var core = GameObject.CreatePrimitive(PrimitiveType.Sphere);
         core.name = "Core";
         core.transform.SetParent(parent, false);
-        core.transform.localScale = Vector3.one * 0.42f;
+        core.transform.localScale = Vector3.one * 0.22f;
         Object.Destroy(core.GetComponent<Collider>());
-        core.GetComponent<Renderer>().material = EarthTextureLoader.CreateCoreMaterial();
+        var rend = core.GetComponent<Renderer>();
+        rend.material = EarthTextureLoader.CreateCoreMaterial();
+        rend.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
         core.SetActive(false);
         return core.transform;
     }

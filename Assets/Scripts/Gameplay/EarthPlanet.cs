@@ -13,7 +13,7 @@ public class EarthPlanet : MonoBehaviour
     [SerializeField] Color healthyTint = Color.white;
     [SerializeField] Color damagedTint = new Color(1f, 0.45f, 0.25f);
     [SerializeField] Color nuclearTint = new Color(0.42f, 0.36f, 0.30f);
-    [SerializeField] int coreRevealAfterHits = 8;
+    [SerializeField] int coreRevealAfterHits = 18;
 
     float _heat;
     float _nuclearScorch;
@@ -91,10 +91,22 @@ public class EarthPlanet : MonoBehaviour
 
         if (coreVisual != null)
         {
-            float reveal = Mathf.InverseLerp(coreRevealAfterHits, coreRevealAfterHits * 4f, _impactCount);
-            coreVisual.gameObject.SetActive(reveal > 0.01f);
-            float scale = Mathf.Lerp(0.35f, 0.92f, Mathf.Clamp01(reveal));
+            float reveal = Mathf.InverseLerp(coreRevealAfterHits, coreRevealAfterHits * 3f, _impactCount);
+            coreVisual.gameObject.SetActive(reveal > 0.02f);
+            // 중심 핵은 작게 — 크레이터 안을 노란 디스크로 채우지 않음
+            float scale = Mathf.Lerp(0.14f, 0.28f, Mathf.Clamp01(reveal));
             coreVisual.localScale = Vector3.one * scale;
+
+            var rend = coreVisual.GetComponent<Renderer>();
+            if (rend != null)
+            {
+                var mat = rend.material;
+                if (mat != null && mat.HasProperty("_EmissionColor"))
+                {
+                    float heat = Mathf.Clamp01(reveal);
+                    mat.SetColor("_EmissionColor", new Color(0.45f, 0.14f, 0.04f) * Mathf.Lerp(0.25f, 0.9f, heat));
+                }
+            }
         }
     }
 }

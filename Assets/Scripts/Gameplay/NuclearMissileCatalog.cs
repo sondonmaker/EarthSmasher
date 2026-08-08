@@ -18,6 +18,7 @@ public class FleetVisualCatalog : ScriptableObject
     public GameObject planetKiller;
     public GameObject probe;
     public GameObject orbitalCannon;
+    public GameObject miningDrill;
 }
 
 [CreateAssetMenu(fileName = "ProFxParticleCatalog", menuName = "EarthSmasher/ProFX Particle Catalog")]

@@ -8,6 +8,7 @@ public static class EarthResetSystem
     static readonly string[] PermanentChildren =
     {
         "Core",
+        "Mantle",
         "Ocean",
         "Clouds",
         "Atmosphere",

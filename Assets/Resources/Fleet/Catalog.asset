@@ -12,10 +12,11 @@ MonoBehaviour:
   m_Script: {fileID: 0}
   m_Name: Catalog
   m_EditorClassIdentifier: Assembly-CSharp::FleetVisualCatalog
-  battleship: {fileID: 1152354105411914, guid: cdbec52167efb6a48b63cebb3284c246, type: 3}
-  ufo: {fileID: 5903451119183343922, guid: cef6de11ad9c348f1902c4033bed1701, type: 3}
-  fighter: {fileID: 2715777419715836930, guid: 94237cc2b5ca52c44a5654ae52a61474, type: 3}
-  fighterAlt: {fileID: 2531383839522802872, guid: b1162a5c6d646cc40b545815fb38f1b9, type: 3}
-  planetKiller: {fileID: 2918102459872870963, guid: 2dfe3fb997f73f44aace082d35d50b10, type: 3}
-  probe: {fileID: 8416971370219110332, guid: 9051477b658334c49ad46bc3a438ae61, type: 3}
-  orbitalCannon: {fileID: 408642208468439069, guid: 62509fffc85c1934aa16ad6266a0b03a, type: 3}
+  battleship: {fileID: 0}
+  ufo: {fileID: 0}
+  fighter: {fileID: 0}
+  fighterAlt: {fileID: 0}
+  planetKiller: {fileID: 0}
+  probe: {fileID: 0}
+  orbitalCannon: {fileID: 0}
+  miningDrill: {fileID: 0}

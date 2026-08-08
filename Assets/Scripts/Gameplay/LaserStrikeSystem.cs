@@ -332,8 +332,12 @@ public class LaserStrikeSystem : MonoBehaviour
             if (dig && digTimer > 0.12f)
             {
                 digTimer = 0f;
-                EarthCraterDeform.Ensure(earth)?.DrillBore(point, 0.1f, 0.06f, 0.3f);
-                EarthSurfaceScorch.Ensure(earth)?.BurnAt(point, 0.04f, color.r > 0.7f ? 0.85f : 0.55f);
+                var deform = EarthCraterDeform.Ensure(earth);
+                int hits = deform != null ? deform.DrillBore(point, 0.1f, 0.06f, 0.3f) : 0;
+                var scorch = EarthSurfaceScorch.Ensure(earth);
+                scorch?.BurnAt(point, 0.04f, color.r > 0.7f ? 0.85f : 0.55f);
+                if (hits > 0 && (hits % 3 == 0 || hits >= 8))
+                    ImpactCrater.ApplyDigVisuals(earth, point, 0.038f + hits * 0.002f, hits, point.GetHashCode());
                 PopulationCasualtySystem.ApplyAt(
                     earth,
                     point,
@@ -347,8 +351,11 @@ public class LaserStrikeSystem : MonoBehaviour
         // 마무리 강한 한 방
         if (dig)
         {
-            EarthCraterDeform.Ensure(earth)?.DrillBore(point, 0.14f, 0.1f, 0.26f);
+            var deform = EarthCraterDeform.Ensure(earth);
+            int hits = deform != null ? deform.DrillBore(point, 0.14f, 0.1f, 0.26f) : 0;
             EarthSurfaceScorch.Ensure(earth)?.BurnAt(point, 0.06f, 0.9f);
+            if (hits > 0)
+                ImpactCrater.ApplyDigVisuals(earth, point, 0.07f, hits, point.GetHashCode() ^ 17);
         }
         PopulationCasualtySystem.ApplyAt(
             earth,

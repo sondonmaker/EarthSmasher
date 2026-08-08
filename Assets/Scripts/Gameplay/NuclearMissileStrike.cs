@@ -225,7 +225,7 @@ public class NuclearMissileStrike : MonoBehaviour
             case NukeStrikeKind.Antimatter: return "ANTIMATTER MISSILE";
             case NukeStrikeKind.Guided: return "GUIDED MISSILE";
             case NukeStrikeKind.FusionCore: return "FUSION CORE";
-            case NukeStrikeKind.MiningDrill: return "MINING DRILL";
+            case NukeStrikeKind.MiningDrill: return "SOVIET DRILL";
             default: return "NUKE MISSILE";
         }
     }

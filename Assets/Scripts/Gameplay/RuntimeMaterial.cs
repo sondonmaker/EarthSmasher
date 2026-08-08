@@ -37,6 +37,26 @@ public static class RuntimeMaterial
         return mat;
     }
 
+    public static Material TexturedOpaque(Texture albedo, Color tint)
+    {
+        var mat = new Material(EarthTextureLoader.SafeShader("Standard", "Universal Render Pipeline/Lit"));
+        if (albedo != null)
+        {
+            mat.mainTexture = albedo;
+            if (mat.HasProperty("_MainTex"))
+                mat.SetTexture("_MainTex", albedo);
+            if (mat.HasProperty("_BaseMap"))
+                mat.SetTexture("_BaseMap", albedo);
+        }
+
+        ApplyColor(mat, tint);
+        if (mat.HasProperty("_Glossiness"))
+            mat.SetFloat("_Glossiness", 0.35f);
+        if (mat.HasProperty("_Smoothness"))
+            mat.SetFloat("_Smoothness", 0.35f);
+        return mat;
+    }
+
     static Shader PickShader(bool preferTransparent)
     {
         return EarthTextureLoader.SafeShader(

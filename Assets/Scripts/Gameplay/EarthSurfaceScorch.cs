@@ -773,6 +773,209 @@ public class EarthSurfaceScorch : MonoBehaviour
         dirty = true;
     }
 
+    /// <summary>
+    /// 같은 지점을 깊게 파낼수록 중심이 붉은 용암 광석(균열+발광) 질감으로 변한다.
+    /// depth01: 0=얕음, 1=Pepe 펀치 후반급 깊이.
+    /// </summary>
+    public void PaintDeepOreInterior(Vector3 worldPoint, float radiusNorm, float depth01, int seed = 0, bool lite = false)
+    {
+        EnsureWorkingTexture();
+        EnsureImpactTextures();
+        if (working == null || pixels == null || depth01 < 0.04f)
+            return;
+
+        Vector3 local = transform.InverseTransformPoint(worldPoint);
+        if (local.sqrMagnitude < 1e-6f)
+            return;
+
+        EarthGeo.DirectionToLatLon(local.normalized, out float lat, out float lon);
+        EarthGeo.LatLonToUv(lat, lon, out float u, out float v);
+
+        int w = working.width;
+        int h = working.height;
+        int cx = Mathf.Clamp(Mathf.RoundToInt(u * (w - 1)), 0, w - 1);
+        int cy = Mathf.Clamp(Mathf.RoundToInt(v * (h - 1)), 0, h - 1);
+
+        if (seed == 0)
+            seed = (cx * 92837111) ^ (cy * 689287499) ^ depth01.GetHashCode();
+        var rng = new System.Random(seed);
+
+        depth01 = Mathf.Clamp01(depth01);
+        float radiusScale = lite ? 0.68f : 1f;
+        float radiusPx = Mathf.Clamp(radiusNorm * w * 0.78f * radiusScale, lite ? 12f : 18f, w * (lite ? 0.14f : 0.24f));
+        float stretchX = Mathf.Lerp(0.75f, 1.25f, (float)rng.NextDouble());
+        float stretchY = Mathf.Lerp(0.78f, 1.22f, (float)rng.NextDouble());
+        float rot = (float)(rng.NextDouble() * Mathf.PI * 2.0);
+        float cosR = Mathf.Cos(rot);
+        float sinR = Mathf.Sin(rot);
+        float uvRot = (float)(rng.NextDouble() * Mathf.PI * 2.0);
+        float cosU = Mathf.Cos(uvRot);
+        float sinU = Mathf.Sin(uvRot);
+        float tile = Mathf.Lerp(lite ? 2.2f : 2.8f, lite ? 4.5f : 6.5f, depth01);
+        int step = lite ? 2 : 1;
+
+        int r = Mathf.CeilToInt(radiusPx * 1.45f * Mathf.Max(stretchX, stretchY));
+        float aspect = h / (float)Mathf.Max(1, w);
+        float fieryRadius = Mathf.Lerp(0.42f, 0.88f, depth01);
+        float blendStrength = Mathf.Lerp(lite ? 0.42f : 0.55f, lite ? 0.78f : 0.98f, depth01);
+
+        var charred = new Color32(10, 7, 6, 255);
+        var coal = new Color32(22, 14, 11, 255);
+
+        for (int dy = -r; dy <= r; dy += step)
+        {
+            int y = cy + dy;
+            if (y < 0 || y >= h)
+                continue;
+            for (int dx = -r; dx <= r; dx += step)
+            {
+                float rx = (dx * cosR + dy * sinR) / stretchX;
+                float ry = (-dx * sinR + dy * cosR) / (stretchY * Mathf.Max(0.35f, aspect * 2f));
+                float dist = Mathf.Sqrt(rx * rx + ry * ry) / Mathf.Max(0.001f, radiusPx);
+                if (dist > 1.15f)
+                    continue;
+
+                int x = cx + dx;
+                while (x < 0) x += w;
+                while (x >= w) x -= w;
+
+                float lx = (dx * cosU - dy * sinU) * tile / radiusPx;
+                float ly = (dx * sinU + dy * cosU) * tile / radiusPx;
+                float su = Mathf.Abs(lx) + 0.5f + seed * 0.0001f;
+                float sv = Mathf.Abs(ly) + 0.5f + seed * 0.0002f;
+
+                Color32 lava = Sample(lavaColorPx, lavaW, lavaH, su, sv);
+                Color32 emit = Sample(lavaEmitPx, lavaW, lavaH, su * 1.15f, sv * 1.15f);
+                Color32 rock = Sample(rockColorPx, rockW, rockH, su * 0.8f, sv * 0.8f);
+
+                float crackA = Mathf.PerlinNoise(lx * 3.1f + 0.17f, ly * 2.7f + 0.31f);
+                float crackB = Mathf.PerlinNoise(lx * 7.3f + 1.9f, ly * 6.1f + 0.8f);
+                float crack = Mathf.Clamp01((crackA * 0.55f + crackB * 0.45f - 0.38f) * (1.2f + depth01));
+
+                var fire = new Color32(
+                    (byte)Mathf.Min(255, lava.r * 0.55f + emit.r * 0.65f + 35),
+                    (byte)Mathf.Min(255, lava.g * 0.35f + emit.g * 0.4f + 8),
+                    (byte)Mathf.Min(255, lava.b * 0.25f + 6),
+                    255);
+
+                Color32 target;
+                if (dist < fieryRadius * 0.35f)
+                    target = Color32.Lerp(fire, charred, crack * 0.75f);
+                else if (dist < fieryRadius)
+                {
+                    float t = (dist - fieryRadius * 0.35f) / Mathf.Max(0.001f, fieryRadius * 0.65f);
+                    var mid = Color32.Lerp(fire, coal, t * 0.45f);
+                    target = Color32.Lerp(mid, rock, crack * 0.35f);
+                }
+                else
+                    target = Color32.Lerp(rock, charred, Mathf.Clamp01((dist - fieryRadius) / 0.35f));
+
+                float mask = dist < fieryRadius
+                    ? blendStrength
+                    : blendStrength * Mathf.SmoothStep(1f, 0f, (dist - fieryRadius) / 0.45f);
+                if (mask < 0.03f)
+                    continue;
+
+                int idx = y * w + x;
+                Color32 p = pixels[idx];
+                p.r = (byte)Mathf.RoundToInt(Mathf.Lerp(p.r, target.r, mask));
+                p.g = (byte)Mathf.RoundToInt(Mathf.Lerp(p.g, target.g, mask));
+                p.b = (byte)Mathf.RoundToInt(Mathf.Lerp(p.b, target.b, mask));
+                pixels[idx] = p;
+            }
+        }
+
+        dirty = true;
+    }
+
+    /// <summary>Pepe bore — 용암만 (회색 암석 링 없음).</summary>
+    public void PaintPepeLavaBore(Vector3 worldPoint, float radiusNorm, float depth01, int seed = 0)
+    {
+        EnsureWorkingTexture();
+        EnsureImpactTextures();
+        if (working == null || pixels == null || lavaColorPx == null || depth01 < 0.06f)
+            return;
+
+        Vector3 local = transform.InverseTransformPoint(worldPoint);
+        if (local.sqrMagnitude < 1e-6f)
+            return;
+
+        EarthGeo.DirectionToLatLon(local.normalized, out float lat, out float lon);
+        EarthGeo.LatLonToUv(lat, lon, out float u, out float v);
+
+        int w = working.width;
+        int h = working.height;
+        int cx = Mathf.Clamp(Mathf.RoundToInt(u * (w - 1)), 0, w - 1);
+        int cy = Mathf.Clamp(Mathf.RoundToInt(v * (h - 1)), 0, h - 1);
+
+        if (seed == 0)
+            seed = (cx * 92837111) ^ (cy * 689287499) ^ depth01.GetHashCode();
+        var rng = new System.Random(seed);
+
+        depth01 = Mathf.Clamp01(depth01);
+        float radiusPx = Mathf.Clamp(radiusNorm * w * 0.82f, 14f, w * 0.2f);
+        float stretchX = Mathf.Lerp(0.82f, 1.18f, (float)rng.NextDouble());
+        float stretchY = Mathf.Lerp(0.84f, 1.16f, (float)rng.NextDouble());
+        float rot = (float)(rng.NextDouble() * Mathf.PI * 2.0);
+        float cosR = Mathf.Cos(rot);
+        float sinR = Mathf.Sin(rot);
+        float tile = Mathf.Lerp(3f, 5.5f, depth01);
+        int r = Mathf.CeilToInt(radiusPx * 1.2f * Mathf.Max(stretchX, stretchY));
+        float aspect = h / (float)Mathf.Max(1, w);
+        float blendStrength = Mathf.Lerp(0.62f, 0.98f, depth01);
+
+        for (int dy = -r; dy <= r; dy++)
+        {
+            int y = cy + dy;
+            if (y < 0 || y >= h)
+                continue;
+            for (int dx = -r; dx <= r; dx++)
+            {
+                float rx = (dx * cosR + dy * sinR) / stretchX;
+                float ry = (-dx * sinR + dy * cosR) / (stretchY * Mathf.Max(0.35f, aspect * 2f));
+                float dist = Mathf.Sqrt(rx * rx + ry * ry) / Mathf.Max(0.001f, radiusPx);
+                if (dist > 1f)
+                    continue;
+
+                int x = cx + dx;
+                while (x < 0) x += w;
+                while (x >= w) x -= w;
+
+                float su = (dx / radiusPx) * tile + seed * 0.0001f;
+                float sv = (dy / radiusPx) * tile + seed * 0.0002f;
+                Color32 lava = Sample(lavaColorPx, lavaW, lavaH, su, sv);
+                Color32 emit = Sample(lavaEmitPx, lavaW, lavaH, su * 1.2f, sv * 1.2f);
+                float crack = Mathf.PerlinNoise(su * 3.4f, sv * 2.9f);
+
+                var fire = new Color32(
+                    (byte)Mathf.Min(255, lava.r * 0.7f + emit.r * 0.75f + 40),
+                    (byte)Mathf.Min(255, lava.g * 0.45f + emit.g * 0.5f + 12),
+                    (byte)Mathf.Min(255, lava.b * 0.2f + 8),
+                    255);
+
+                var hot = new Color32(
+                    (byte)Mathf.Min(255, fire.r + 25),
+                    (byte)Mathf.Min(255, fire.g + (int)(crack * 18f)),
+                    (byte)Mathf.Min(255, fire.b + 4),
+                    255);
+
+                Color32 target = dist < 0.45f ? hot : Color32.Lerp(fire, hot, 1f - dist);
+                float mask = blendStrength * Mathf.SmoothStep(1f, 0f, dist);
+                if (mask < 0.04f)
+                    continue;
+
+                int idx = y * w + x;
+                Color32 p = pixels[idx];
+                p.r = (byte)Mathf.RoundToInt(Mathf.Lerp(p.r, target.r, mask));
+                p.g = (byte)Mathf.RoundToInt(Mathf.Lerp(p.g, target.g, mask));
+                p.b = (byte)Mathf.RoundToInt(Mathf.Lerp(p.b, target.b, mask));
+                pixels[idx] = p;
+            }
+        }
+
+        dirty = true;
+    }
+
     /// <summary>호환용 — 낙서 크랙 대신 텍스처 크레이터만 강화.</summary>
     public void PaintLavaCracks(Vector3 worldPoint, float radiusNorm = 0.12f, int branches = 16)
     {

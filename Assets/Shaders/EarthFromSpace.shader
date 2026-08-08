@@ -7,9 +7,11 @@ Shader "EarthSmasher/EarthFromSpace"
         _Color ("Tint", Color) = (1,1,1,1)
         _Exposure ("Exposure", Range(0.2, 2)) = 1.0
         _Contrast ("Contrast", Range(0.5, 2)) = 1.05
-        _Terminator ("Terminator Softness", Range(0.05, 0.8)) = 0.22
+        _Terminator ("Terminator Softness", Range(0.05, 0.8)) = 0.32
         _NightIntensity ("Night Lights", Range(0, 3)) = 1.0
-        _AmbientFloor ("Ambient Floor", Range(0, 0.2)) = 0.05
+        _AmbientFloor ("Ambient Floor", Range(0, 0.5)) = 0.16
+        _NightSideFill ("Night Side Visibility", Range(0, 1)) = 0.46
+        _RimBoost ("Edge Visibility", Range(0, 0.4)) = 0.12
         _PierceCount ("Pierce Count", Int) = 0
         _PierceEdge ("Pierce Molten Edge", Float) = 0.04
         _MoltenColor ("Molten Color", Color) = (1, 0.28, 0.05, 1)
@@ -46,6 +48,8 @@ Shader "EarthSmasher/EarthFromSpace"
             float _Terminator;
             float _NightIntensity;
             float _AmbientFloor;
+            float _NightSideFill;
+            float _RimBoost;
 
             int _PierceCount;
             float _PierceEdge;
@@ -67,6 +71,7 @@ Shader "EarthSmasher/EarthFromSpace"
                 float2 uv : TEXCOORD0;
                 float3 worldNormal : TEXCOORD1;
                 float3 objPos : TEXCOORD2;
+                float3 worldPos : TEXCOORD3;
             };
 
             float DistToAxis(float3 p, float3 axis)
@@ -108,6 +113,7 @@ Shader "EarthSmasher/EarthFromSpace"
                 o.uv = TRANSFORM_TEX(v.uv, _MainTex);
                 o.worldNormal = UnityObjectToWorldNormal(v.normal);
                 o.objPos = v.vertex.xyz;
+                o.worldPos = mul(unity_ObjectToWorld, v.vertex).xyz;
                 return o;
             }
 
@@ -128,9 +134,14 @@ Shader "EarthSmasher/EarthFromSpace"
 
                 float dayAmt = smoothstep(-_Terminator, _Terminator * 0.85, ndotl);
                 float lit = saturate(ndotl);
-                float3 sun = _LightColor0.rgb * (0.25 + 0.75 * lit);
+                float3 sunCol = _LightColor0.rgb;
+                float direct = dayAmt * (0.32 + 0.68 * lit);
+                float fill = _AmbientFloor + _NightSideFill * (1.0 - dayAmt);
 
-                float3 col = day * (sun * dayAmt + _AmbientFloor) + night * (1.0 - dayAmt);
+                float3 viewDir = normalize(_WorldSpaceCameraPos.xyz - i.worldPos);
+                float rim = pow(1.0 - saturate(dot(n, viewDir)), 3.0) * _RimBoost;
+
+                float3 col = day * (sunCol * direct + fill + rim) + night * (1.0 - dayAmt);
 
                 // 구멍 가장자리: 식은 암석 → 벌겋게 달아오른 테두리
                 float molten = pierce.y;

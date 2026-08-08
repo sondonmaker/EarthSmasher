@@ -68,9 +68,9 @@ public class SpaceBackdrop : MonoBehaviour
             skyMat.SetFloat("_ImageType", 0f); // 0 = 360 Degrees
 
         RenderSettings.skybox = skyMat;
-        // 우주/달 시점: 앰비언트 거의 0 — 태양광만으로 지구를 비춤
+        // 우주 배경이어도 지구 실루엣/대륙이 보이도록 최소 앰비언트 유지
         RenderSettings.ambientMode = UnityEngine.Rendering.AmbientMode.Flat;
-        RenderSettings.ambientLight = new Color(0.01f, 0.012f, 0.02f);
+        RenderSettings.ambientLight = new Color(0.055f, 0.065f, 0.095f);
         DynamicGI.UpdateEnvironment();
 
         ApplyCameraSkybox();

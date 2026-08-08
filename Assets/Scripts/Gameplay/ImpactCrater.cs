@@ -45,7 +45,33 @@ public class ImpactCrater : MonoBehaviour
 
         var scorch = EarthSurfaceScorch.Ensure(earth);
         if (scorch != null)
-            scorch.PaintImpactCrater(worldPoint, radiusNorm * 1.15f, seed);
+        {
+            float depth01 = deform != null ? deform.GetSiteDepth01(worldPoint) : Mathf.Clamp01((hits - 1) / 8f);
+            if (depth01 > 0.08f)
+                scorch.PaintDeepOreInterior(worldPoint, radiusNorm * (1f + depth01 * 0.4f), depth01, seed);
+            else
+                scorch.PaintImpactCrater(worldPoint, radiusNorm * 1.15f, seed);
+        }
+    }
+
+    public static void ApplyDigVisuals(EarthPlanet earth, Vector3 worldPoint, float radiusNorm, int siteHits, int seed = 0)
+    {
+        if (earth == null || siteHits < 1)
+            return;
+
+        var scorch = EarthSurfaceScorch.Ensure(earth);
+        if (scorch == null)
+            return;
+
+        var deform = EarthCraterDeform.Ensure(earth);
+        float depth01 = deform != null
+            ? deform.GetSiteDepth01(worldPoint)
+            : Mathf.Clamp01((siteHits - 1) / 8f);
+
+        if (depth01 > 0.12f)
+            scorch.PaintDeepOreInterior(worldPoint, radiusNorm * (0.95f + depth01 * 0.45f), depth01, seed, lite: depth01 < 0.45f);
+        else
+            scorch.PaintImpactCrater(worldPoint, radiusNorm * 1.05f, seed != 0 ? seed : HashSeed(worldPoint, radiusNorm));
     }
 
     /// <summary>운석 타격과 동일 — 지형 Dig + 용암 흉터 + 크레이터 텍스처.</summary>

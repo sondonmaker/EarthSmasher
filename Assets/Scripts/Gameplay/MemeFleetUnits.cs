@@ -265,15 +265,7 @@ public class MemePepeUnit : MemeUnitBase
         float progress = flurryHit / (float)Mathf.Max(1, FlurryHits - 1);
 
         var deform = EarthCraterDeform.Ensure(earth);
-        if (deform != null)
-        {
-            float rad = Mathf.Lerp(0.06f, 0.24f, progress);
-            float depth = Mathf.Lerp(0.04f, 0.26f, progress);
-            float floor = Mathf.Lerp(0.34f, 0.19f, progress);
-            deform.DrillBore(hit, rad, depth, floor);
-        }
-
-        EarthSurfaceScorch.Ensure(earth)?.BurnAt(hit, 0.02f + progress * 0.035f, 0.55f + progress * 0.2f);
+        deform?.PepePunch(hit, progress);
 
         MemeAttackSystem.SpawnFlash(
             hit,
@@ -296,7 +288,7 @@ public class MemePepeUnit : MemeUnitBase
     {
         Vector3 hit = SurfacePoint();
         Vector3 n = AimDirWorld();
-        EarthCraterDeform.Ensure(earth)?.DrillBore(hit, 0.26f, 0.28f, 0.18f);
+        EarthCraterDeform.Ensure(earth)?.PepePunch(hit, 1f);
         CameraShake.Shake(0.12f, 0.09f);
         MemeCaption.Spawn(hit + n * (earth.Radius * 0.16f), "feels good man", new Color(0.55f, 1f, 0.45f), earth.Radius * 0.11f);
         MemeAttackSystem.ApplyCasualtiesAt(earth, hit, 0.05f, 0.45f, 0.95f);

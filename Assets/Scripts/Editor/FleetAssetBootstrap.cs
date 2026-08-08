@@ -58,9 +58,10 @@ public static class FleetAssetBootstrap
         var planetKiller = GenericAircraftFleetSetup.FindPlanetKiller();
         var probe = GenericAircraftFleetSetup.FindProbe();
         var orbitalCannon = GenericAircraftFleetSetup.FindOrbitalCannon();
+        var miningDrill = MiningDrillSetup.FindSovietDrill();
 
         if (battleship == null && ufo == null && fighter == null && planetKiller == null && probe == null
-            && orbitalCannon == null)
+            && orbitalCannon == null && miningDrill == null)
             return false;
 
         FleetBattleshipSetup.EnsureResourcesFolder();
@@ -85,6 +86,10 @@ public static class FleetAssetBootstrap
             catalog.probe = probe;
         if (orbitalCannon != null)
             catalog.orbitalCannon = orbitalCannon;
+        if (miningDrill != null)
+            catalog.miningDrill = miningDrill;
+
+        MiningDrillSetup.EnsureResourcesCopy();
 
         EditorUtility.SetDirty(catalog);
         return true;

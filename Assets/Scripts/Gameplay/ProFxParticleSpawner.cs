@@ -393,6 +393,7 @@ public static class ProFxParticleSpawner
             StrikeImpactKind.FighterStrafe => 0.018f,
             StrikeImpactKind.VonNeumannProbe => 0.016f,
             StrikeImpactKind.UfoPop => 0.018f,
+            StrikeImpactKind.OrePunch => 0.044f,
             _ => 0.022f
         };
         return Mathf.Min(scale, earthRadius * maxNorm);
@@ -477,6 +478,15 @@ public static class ProFxParticleSpawner
                 resourcesPath = "Smokes/ppfxFlareSmokeOrange";
                 scaleMul = 0.024f + intensity * 0.016f;
                 lifetime = 1.7f;
+                return;
+            case StrikeImpactKind.OrePunch:
+                resourcesPath = intensity >= 0.62f
+                    ? "Fire & Explosions/ppfxExplosionHeavySimple"
+                    : intensity >= 0.38f
+                        ? "Fire & Explosions/ppfxGroundExplosionHit"
+                        : "Fire & Explosions/ppfxExplosionSmall";
+                scaleMul = 0.034f + intensity * 0.024f;
+                lifetime = 1.9f;
                 return;
             default:
                 resourcesPath = intensity >= 0.55f
