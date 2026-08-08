@@ -11,6 +11,18 @@ public static class FleetAssetBootstrap
     [MenuItem("EarthSmasher/Link All Imported Assets")]
     public static void LinkAllImportedAssets()
     {
+        int linked = LinkAllImportedAssetsSilent();
+
+        EditorUtility.DisplayDialog(
+            "Asset link complete",
+            linked >= 4
+                ? "Fleet, Missile, Laser VFX, and ProFX Particle catalogs are ready."
+                : $"Linked {linked}/4 catalogs. Import missing packages if any failed.",
+            "OK");
+    }
+
+    public static int LinkAllImportedAssetsSilent()
+    {
         int linked = 0;
         if (LinkFleetCatalog()) linked++;
         if (LinkMissileCatalog()) linked++;
@@ -19,13 +31,7 @@ public static class FleetAssetBootstrap
 
         AssetDatabase.SaveAssets();
         AssetDatabase.Refresh();
-
-        EditorUtility.DisplayDialog(
-            "Asset link complete",
-            linked >= 4
-                ? "Fleet, Missile, Laser VFX, and ProFX Particle catalogs are ready."
-                : $"Linked {linked}/4 catalogs. Import missing packages if any failed.",
-            "OK");
+        return linked;
     }
 
     [InitializeOnLoadMethod]

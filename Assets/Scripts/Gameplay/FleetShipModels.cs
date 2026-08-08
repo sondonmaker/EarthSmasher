@@ -283,7 +283,10 @@ public static class FleetShipModels
         FleetVisualPose pose = FleetVisualPose.MiddleForward)
     {
         if (template == null)
+        {
+            Debug.LogWarning("[Fleet] Missing 3D model for " + rootName + ". Spawning primitive fallback.");
             return null;
+        }
 
         var root = new GameObject(rootName);
         var visual = Object.Instantiate(template, root.transform);
@@ -341,12 +344,11 @@ public static class FleetShipModels
         var catalog = LoadFleetCatalog();
         if (catalog != null)
         {
-            if (variant % 3 == 0 && catalog.fighter != null)
-                return catalog.fighter;
-            if (variant % 3 == 1 && catalog.fighterAlt != null)
-                return catalog.fighterAlt;
-            if (catalog.fighter != null)
-                return catalog.fighter;
+            if (variant % 3 == 0)
+                return FirstCatalogPrefab(catalog.fighter, catalog.fighterAlt, catalog.planetKiller);
+            if (variant % 3 == 1)
+                return FirstCatalogPrefab(catalog.fighterAlt, catalog.fighter, catalog.planetKiller);
+            return FirstCatalogPrefab(catalog.fighter, catalog.fighterAlt, catalog.planetKiller);
         }
 
 #if UNITY_EDITOR
@@ -360,8 +362,8 @@ public static class FleetShipModels
     static GameObject LoadPlanetKillerTemplate()
     {
         var catalog = LoadFleetCatalog();
-        if (catalog != null && catalog.planetKiller != null)
-            return catalog.planetKiller;
+        if (catalog != null)
+            return FirstCatalogPrefab(catalog.planetKiller, catalog.battleship);
 
 #if UNITY_EDITOR
         return LoadGenericAircraftEditor("aircraft-k");
@@ -373,8 +375,8 @@ public static class FleetShipModels
     static GameObject LoadProbeTemplate()
     {
         var catalog = LoadFleetCatalog();
-        if (catalog != null && catalog.probe != null)
-            return catalog.probe;
+        if (catalog != null)
+            return FirstCatalogPrefab(catalog.probe, catalog.fighter);
 
 #if UNITY_EDITOR
         return LoadGenericAircraftEditor("aircraft-a");
@@ -386,8 +388,8 @@ public static class FleetShipModels
     static GameObject LoadOrbitalCannonTemplate()
     {
         var catalog = LoadFleetCatalog();
-        if (catalog != null && catalog.orbitalCannon != null)
-            return catalog.orbitalCannon;
+        if (catalog != null)
+            return FirstCatalogPrefab(catalog.orbitalCannon, catalog.battleship);
 
 #if UNITY_EDITOR
         return LoadGenericAircraftEditor("aircraft-h");
@@ -400,7 +402,22 @@ public static class FleetShipModels
     {
         if (fleetCatalog == null)
             fleetCatalog = Resources.Load<FleetVisualCatalog>(FleetCatalogPath);
+
+        if (fleetCatalog == null)
+            Debug.LogWarning("[Fleet] Missing Resources/Fleet/Catalog (FleetVisualCatalog). Using primitive fallback ships.");
+
         return fleetCatalog;
+    }
+
+    static GameObject FirstCatalogPrefab(params GameObject[] options)
+    {
+        for (int i = 0; i < options.Length; i++)
+        {
+            if (options[i] != null)
+                return options[i];
+        }
+
+        return null;
     }
 
     static void PrepareShipRoot(GameObject root)

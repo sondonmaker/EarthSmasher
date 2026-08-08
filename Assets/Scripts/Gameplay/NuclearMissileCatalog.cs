@@ -40,4 +40,9 @@ public class ProFxParticleCatalog : ScriptableObject
     public GameObject portalSwirl;
     public GameObject vortexSwirl;
     public GameObject vortexImpact;
+
+    [Header("Fleet anti-UFO")]
+    public GameObject ufoExplosion;
+    public GameObject fleetLaserBeam;
+    public GameObject fleetLaserMuzzle;
 }

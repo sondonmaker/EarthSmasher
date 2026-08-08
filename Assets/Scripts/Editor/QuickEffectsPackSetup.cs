@@ -56,6 +56,8 @@ public static class QuickEffectsPackSetup
         catalog.lightningBeam = LoadPrefab("vfx_Lightning_01");
         catalog.lightningImpact = LoadPrefab("vfx_Lightning_02");
         catalog.sparks = LoadPrefab("vfx_Sparks_01");
+        catalog.muzzleFlash = LoadPrefab("vfx_MuzzleFlash_02");
+        catalog.projectileBolt = LoadPrefab("vfx_Projectile_01");
 
         EditorUtility.SetDirty(catalog);
         return catalog.fireBeam != null || catalog.lightningBeam != null;

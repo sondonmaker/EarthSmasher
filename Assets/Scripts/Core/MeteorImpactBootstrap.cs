@@ -166,28 +166,22 @@ public class MeteorImpactBootstrap : MonoBehaviour
 
     EarthPlanet CreateEarth()
     {
-        var earthGo = GameObject.CreatePrimitive(PrimitiveType.Sphere);
+        if (EarthPlanetFreeSetup.TryCreate(out GameObject earthGo, out Renderer rend, out Transform core))
+            return FinishEarthSetup(earthGo, rend, core, usePlanetEarthFreeLayers: true);
+
+        earthGo = GameObject.CreatePrimitive(PrimitiveType.Sphere);
         earthGo.name = "Earth";
         earthGo.transform.position = Vector3.zero;
         earthGo.transform.localScale = Vector3.one * 5f;
 
-        // 기본 Sphere는 15°/세그먼트라 크레이터가 폴리곤보다 작다 → 고밀도로 교체.
-        // UV는 기존 배치를 역산해 그대로 따르므로 텍스처가 틀어지지 않는다.
         EarthMeshBuilder.Upgrade(earthGo.GetComponent<MeshFilter>());
 
-        var rend = earthGo.GetComponent<Renderer>();
+        rend = earthGo.GetComponent<Renderer>();
         rend.material = EarthTextureLoader.CreateCrustMaterial(earthDayTexture, earthNightTexture);
         rend.receiveShadows = true;
 
-        var core = GameObject.CreatePrimitive(PrimitiveType.Sphere);
-        core.name = "Core";
-        core.transform.SetParent(earthGo.transform, false);
-        core.transform.localScale = Vector3.one * 0.42f;
-        Destroy(core.GetComponent<Collider>());
-        core.GetComponent<Renderer>().material = EarthTextureLoader.CreateCoreMaterial();
-        core.SetActive(false);
+        core = CreateCoreSphere(earthGo.transform);
 
-        // day 맵에 바다 포함 — 반투명 Ocean 레이어는 끔 (비침 방지)
         var ocean = CreateLayerSphere("Ocean", earthGo.transform, 1.006f, EarthTextureLoader.CreateOceanMaterial(), false);
         ocean.SetActive(false);
 
@@ -195,21 +189,66 @@ public class MeteorImpactBootstrap : MonoBehaviour
         clouds.AddComponent<EarthSpin>().SetSpeed(3.2f);
 
         var atmosphere = CreateLayerSphere("Atmosphere", earthGo.transform, 1.05f, EarthTextureLoader.CreateAtmosphereMaterial(), false);
-        var halo = CreateLayerSphere("AtmosphereHalo", atmosphere.transform, 1.035f, EarthTextureLoader.CreateAtmosphereHaloMaterial(), false);
+        CreateLayerSphere("AtmosphereHalo", atmosphere.transform, 1.035f, EarthTextureLoader.CreateAtmosphereHaloMaterial(), false);
 
         var aurora = CreateLayerSphere("Aurora", earthGo.transform, 1.04f, EarthTextureLoader.CreateAuroraMaterial(), false);
 
-        var planet = earthGo.AddComponent<EarthPlanet>();
-        planet.SetVisualRefs(rend, core.transform);
-        earthGo.AddComponent<EarthSpin>().SetSpeed(7.5f);
+        return FinishEarthSetup(earthGo, rend, core, usePlanetEarthFreeLayers: false, ocean, clouds, atmosphere, aurora);
+    }
 
-        // 메시 교체는 여기(생성 시점) 한 번뿐. 런타임 리메시는 여전히 금지 —
-        // 크레이터는 EarthCraterDeform이 이 메시를 복제 후 vertices만 이동한다.
+    static Transform CreateCoreSphere(Transform parent)
+    {
+        var core = GameObject.CreatePrimitive(PrimitiveType.Sphere);
+        core.name = "Core";
+        core.transform.SetParent(parent, false);
+        core.transform.localScale = Vector3.one * 0.42f;
+        Object.Destroy(core.GetComponent<Collider>());
+        core.GetComponent<Renderer>().material = EarthTextureLoader.CreateCoreMaterial();
+        core.SetActive(false);
+        return core.transform;
+    }
 
-        var body = earthGo.AddComponent<EarthBodyData>();
+    EarthPlanet FinishEarthSetup(
+        GameObject earthGo,
+        Renderer rend,
+        Transform core,
+        bool usePlanetEarthFreeLayers,
+        GameObject ocean = null,
+        GameObject clouds = null,
+        GameObject atmosphere = null,
+        GameObject aurora = null)
+    {
+        if (rend != null)
+            rend.receiveShadows = true;
 
-        var layers = earthGo.AddComponent<EarthLayerController>();
-        layers.Bind(earthGo, ocean, clouds, atmosphere, aurora);
+        var planet = earthGo.GetComponent<EarthPlanet>();
+        if (planet == null)
+            planet = earthGo.AddComponent<EarthPlanet>();
+        planet.SetVisualRefs(rend, core);
+
+        if (earthGo.GetComponent<EarthSpin>() == null)
+            earthGo.AddComponent<EarthSpin>().SetSpeed(7.5f);
+
+        var body = earthGo.GetComponent<EarthBodyData>();
+        if (body == null)
+            body = earthGo.AddComponent<EarthBodyData>();
+
+        var layers = earthGo.GetComponent<EarthLayerController>();
+        if (layers == null)
+            layers = earthGo.AddComponent<EarthLayerController>();
+
+        if (usePlanetEarthFreeLayers)
+        {
+            layers.Bind(rend != null ? rend.gameObject : earthGo, null, null, null, null);
+            layers.cloudsEnabled = false;
+            layers.atmosphereEnabled = false;
+            layers.auroraEnabled = false;
+            layers.oceanEnabled = false;
+        }
+        else
+        {
+            layers.Bind(earthGo, ocean, clouds, atmosphere, aurora);
+        }
 
         var panelGo = new GameObject("EarthControlPanel");
         var panel = panelGo.AddComponent<EarthControlPanel>();

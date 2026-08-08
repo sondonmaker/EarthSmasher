@@ -17,4 +17,8 @@ public class LaserVfxCatalog : ScriptableObject
     public GameObject plasmaImpact;
     public GameObject lightningImpact;
     public GameObject sparks;
+
+    [Header("Fleet / weapons")]
+    public GameObject muzzleFlash;
+    public GameObject projectileBolt;
 }

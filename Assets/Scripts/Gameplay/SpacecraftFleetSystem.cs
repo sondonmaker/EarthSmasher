@@ -292,6 +292,86 @@ public class SpacecraftFleetSystem : MonoBehaviour
             Object.Destroy(beam);
     }
 
+    /// <summary>배틀쉽 레이저포 — ProFX RayLightning 빔, UFO 명중.</summary>
+    public static IEnumerator FireBattleshipAntiUfoLaser(Vector3 from, FleetUfo ufo, float earthRadius)
+    {
+        if (ufo == null)
+            yield break;
+
+        if (ProFxParticleSpawner.HasCatalog)
+        {
+            yield return ProFxParticleSpawner.FireBattleshipUfoLaser(from, ufo, earthRadius);
+            yield break;
+        }
+
+        Vector3 to = ufo.transform.position;
+        Vector3 dir = to - from;
+        if (dir.sqrMagnitude < 1e-6f)
+            yield break;
+        dir.Normalize();
+
+        Vector3 muzzle = from + dir * (earthRadius * 0.05f);
+        LaserVfxSpawner.SpawnMuzzleFlash(muzzle, to, earthRadius * 0.042f);
+
+        var boltPrefab = LaserVfxSpawner.ForBattleshipUfoBolt();
+        float scale = LaserVfxSpawner.FleetBeamScale(StrikeImpactKind.BattleshipBeam) * 1.05f;
+        float dist = Vector3.Distance(muzzle, to);
+        float boltLength = Mathf.Clamp(dist * 0.18f, 0.12f, 0.75f);
+        float speed = Mathf.Clamp(dist * 4f, 12f, 60f);
+        float headDist = 0f;
+        GameObject vfxBolt = null;
+
+        while (headDist < dist && ufo != null)
+        {
+            to = ufo.transform.position;
+            dist = Vector3.Distance(muzzle, to);
+            if (dist < 0.01f)
+                break;
+
+            dir = (to - muzzle).normalized;
+            headDist += speed * Time.deltaTime;
+            float head = Mathf.Min(headDist, dist);
+            float tail = Mathf.Max(0f, head - boltLength);
+            Vector3 headPos = muzzle + dir * head;
+            Vector3 tailPos = muzzle + dir * tail;
+
+            if (boltPrefab != null)
+            {
+                if (vfxBolt == null)
+                    vfxBolt = LaserVfxSpawner.SpawnBeam(boltPrefab, tailPos, headPos, scale, -1f);
+                else
+                    LaserVfxSpawner.AimBeam(vfxBolt.transform, tailPos, headPos, scale);
+            }
+
+            yield return null;
+        }
+
+        if (vfxBolt != null)
+            Object.Destroy(vfxBolt);
+
+        if (ufo == null)
+            yield break;
+
+        Vector3 hit = ufo.transform.position;
+        Vector3 hitNormal = (muzzle - hit).normalized;
+        if (hitNormal.sqrMagnitude < 1e-6f)
+            hitNormal = Vector3.up;
+
+        bool killing = ufo.WillDieFrom(1f);
+        if (!killing)
+        {
+            var impact = LaserVfxSpawner.PierceImpactPrefab();
+            LaserVfxSpawner.SpawnImpact(
+                impact,
+                hit,
+                hitNormal,
+                LaserVfxSpawner.FleetImpactScale(StrikeImpactKind.BattleshipBeam),
+                0.32f);
+        }
+
+        ufo.TakeHit(1f, from);
+    }
+
     /// <summary>날아가는 레이저 탄 — 배틀쉽 UFO 격추용.</summary>
     public static IEnumerator FireBoltLaser(
         Vector3 from,
@@ -735,6 +815,7 @@ public class FleetBattleship : MonoBehaviour
     float age;
     float nextShot = 1.2f;
     float shotInterval = 1.6f;
+    bool shooting;
 
     public void Init(EarthPlanet planet, Vector3 pos, Vector3 dir)
     {
@@ -784,16 +865,26 @@ public class FleetBattleship : MonoBehaviour
         Quaternion want = FleetShipModels.BuildOrbitRotation(holdPos, earthCenter, aimPoint);
         transform.rotation = Quaternion.Slerp(transform.rotation, want, Time.deltaTime * 3f);
 
-        if (age < nextShot)
+        if (shooting || age < nextShot)
             return;
 
         int ufoCount = SpacecraftFleetSystem.LiveUfoCount;
         float interval = ufoCount > 6 ? 2.8f : ufoCount > 3 ? 2.1f : shotInterval;
         nextShot = age + interval;
+        shooting = true;
 
-        StartCoroutine(SpacecraftFleetSystem.FireBoltLaser(
-            transform.position, aimPoint, new Color(1f, 0.82f, 0.2f), StrikeImpactKind.BattleshipBeam));
-        ufo.TakeHit(1f, transform.position);
+        StartCoroutine(FireAtUfo(ufo));
+    }
+
+    IEnumerator FireAtUfo(FleetUfo ufo)
+    {
+        if (ufo != null && earth != null)
+        {
+            yield return SpacecraftFleetSystem.FireBattleshipAntiUfoLaser(
+                transform.position, ufo, earth.Radius);
+        }
+
+        shooting = false;
     }
 }
 
@@ -830,13 +921,11 @@ public class FleetUfo : MonoBehaviour
             return;
 
         if (earth != null)
-        {
-            Vector3 n = (transform.position - earth.transform.position).normalized;
-            StrikeImpactFx.Play(earth, transform.position, n, 0.18f, StrikeImpactKind.UfoPop);
-        }
-        CameraShake.Shake(0.025f, 0.05f);
+            UfoDestroyFx.Play(transform.position, earth.Radius);
         Destroy(gameObject);
     }
+
+    public bool WillDieFrom(float damage) => hp - damage <= 0f;
 
     void Update()
     {

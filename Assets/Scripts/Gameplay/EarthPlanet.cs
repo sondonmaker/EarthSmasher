@@ -23,6 +23,7 @@ public class EarthPlanet : MonoBehaviour
     public int ImpactCount => _impactCount;
     public float Heat => _heat;
     public float NuclearScorch => _nuclearScorch;
+    public Renderer CrustRenderer => crustRenderer;
     public float Radius => GetComponent<SphereCollider>().radius * Mathf.Max(transform.lossyScale.x, transform.lossyScale.y, transform.lossyScale.z);
 
     public event Action<float, Vector3> Damaged;

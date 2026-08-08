@@ -2,7 +2,6 @@
 [Ll]ibrary/
 [Tt]emp/
 [Oo]bj/
-[Bb]uild/
 [Bb]uilds/
 [Ll]ogs/
 [Uu]ser[Ss]ettings/
@@ -40,7 +39,22 @@
 Thumbs.db
 Desktop.ini
 
-# Builds / packages
+# Android build outputs (scripts under Build/android/ stay tracked)
+[Bb]uild/[Aa]ndroid/[Rr]elease/
+[Bb]uild/[Aa]ndroid/[Ll]ogs/
+[Bb]uild/[Aa]ndroid/*BackUpThisFolder*/
+[Bb]uild/[Aa]ndroid/*.aab
+[Bb]uild/[Aa]ndroid/*.apk
+[Bb]uild/android/logs/
+[Bb]uild/android/keys/
+[Bb]uild/android/play-keystore.properties
+[Bb]uild/[Ww]indows/
+[Bb]uild/*.log
+[Bb]uild/*.png
+[Bb]uild/pid.txt
+[Bb]uild/player*.log*.keystore
+*.jks
+# Builds / packages (local install files)
 *.apk
 *.aab
 *.unitypackage

@@ -39,7 +39,9 @@ public class EarthSurfaceScorch : MonoBehaviour
     public void Bind(EarthPlanet earth)
     {
         if (crustRenderer == null && earth != null)
-            crustRenderer = earth.GetComponent<Renderer>();
+            crustRenderer = earth.CrustRenderer != null
+                ? earth.CrustRenderer
+                : earth.GetComponentInChildren<Renderer>();
         EnsureWorkingTexture();
     }
 

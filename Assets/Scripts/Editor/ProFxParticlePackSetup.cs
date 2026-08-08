@@ -40,6 +40,9 @@ public static class ProFxParticlePackSetup
         catalog.portalSwirl = Load("Orbs/ppfxOrbBlueTrail.prefab");
         catalog.vortexSwirl = Load("Effects/ppfxLightningSphere.prefab");
         catalog.vortexImpact = Load("Effects/ppfxRayLightning.prefab");
+        catalog.ufoExplosion = Load("Fire & Explosions/ppfxExplosionHeavyShockwave.prefab");
+        catalog.fleetLaserBeam = Load("Effects/ppfxRayLightning.prefab");
+        catalog.fleetLaserMuzzle = Load("Fire & Explosions/ppfxFireSmall.prefab");
 
         EditorUtility.SetDirty(catalog);
         AssetDatabase.SaveAssets();

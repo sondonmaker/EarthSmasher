@@ -1,80 +1,317 @@
 #if UNITY_EDITOR
 using System;
 using System.IO;
+using System.IO.Compression;
+using System.Linq;
 using UnityEditor;
+using System.Collections.Generic;
 using UnityEditor.Build;
 using UnityEditor.Build.Reporting;
+using UnityEditor.Android;
 using UnityEngine;
 
 /// <summary>
-/// 명령줄 APK 빌드.
+/// Android / Google Play 빌드.
 ///
-///   Unity.exe -batchmode -quit -projectPath &lt;proj&gt; -buildTarget Android \
-///             -executeMethod AndroidBuild.BuildApk -logFile &lt;log&gt;
+/// Play Store (AAB):
+///   -executeMethod AndroidBuild.BuildPlayAab
+///
+/// 로컬 테스트 (APK):
+///   -executeMethod AndroidBuild.BuildApk
 /// </summary>
 public static class AndroidBuild
 {
     const string MainScene = "Assets/Scenes/SampleScene.unity";
     const string PackageName = "com.sunsoft.earthsmasher";
+    const string ProductName = "Earth Smasher";
+    const string CompanyName = "sunsoft";
+    const string KeystorePropsRelative = "Build/android/play-keystore.properties";
+    const string ReleaseOutputDir = "Build/Android/Release";
+    const string AppIconPath = "Assets/Art/AppIcon/earth-smasher-icon-512.png";
+    const string AppIconBgPath = "Assets/Art/AppIcon/earth-smasher-icon-bg-512.png";
 
-    public static void BuildApk()
+    public static void BuildPlayAab() => BuildAndroid(release: true, appBundle: true, exitWhenDone: true);
+
+    public static void BuildApk() => BuildAndroid(release: false, appBundle: false, exitWhenDone: true);
+
+    [MenuItem("Build/Google Play AAB (Release)")]
+    public static void MenuBuildPlayAab()
+    {
+        BuildAndroid(release: true, appBundle: true, exitWhenDone: false);
+    }
+
+    [MenuItem("Build/Android APK (Debug)")]
+    public static void MenuBuildApk()
+    {
+        BuildAndroid(release: false, appBundle: false, exitWhenDone: false);
+    }
+
+    static void BuildAndroid(bool release, bool appBundle, bool exitWhenDone)
     {
         try
         {
             EnsureShadersIncluded();
-            ApplySettings();
+            EnsureFleetCatalogForRelease();
+            ApplySettings(release, appBundle);
 
-            string outDir = Path.GetFullPath(Path.Combine(Application.dataPath, "..", "Build", "Android"));
+            string projectRoot = Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
+            string outDir = Path.GetFullPath(Path.Combine(projectRoot, ReleaseOutputDir));
             Directory.CreateDirectory(outDir);
-            string apk = Path.Combine(outDir, "EarthSmasher.apk");
 
-            if (!File.Exists(Path.GetFullPath(Path.Combine(Application.dataPath, "..", MainScene))))
+            string ext = appBundle ? "aab" : "apk";
+            string fileName = appBundle ? "EarthSmasher.aab" : "EarthSmasher.apk";
+            string output = Path.Combine(outDir, fileName);
+
+            if (!File.Exists(Path.GetFullPath(Path.Combine(projectRoot, MainScene))))
             {
                 Debug.LogError($"[AndroidBuild] Scene not found: {MainScene}");
-                EditorApplication.Exit(2);
+                if (exitWhenDone) EditorApplication.Exit(2);
                 return;
             }
 
             var options = new BuildPlayerOptions
             {
                 scenes = new[] { MainScene },
-                locationPathName = apk,
+                locationPathName = output,
                 target = BuildTarget.Android,
                 targetGroup = BuildTargetGroup.Android,
-                options = BuildOptions.None
+                options = BuildOptions.CompressWithLz4HC
             };
 
-            Debug.Log($"[AndroidBuild] Building to {apk}");
+            Debug.Log($"[AndroidBuild] Building {(appBundle ? "AAB" : "APK")} → {output}");
             BuildReport report = BuildPipeline.BuildPlayer(options);
             BuildSummary summary = report.summary;
 
             if (summary.result == BuildResult.Succeeded)
             {
+                if (!File.Exists(output))
+                {
+                    Debug.LogError($"[AndroidBuild] Build reported success but file missing: {output}");
+                    if (exitWhenDone) EditorApplication.Exit(4);
+                    return;
+                }
+
+                if (appBundle)
+                {
+                    if (!ValidateAppBundle(output, out string reason))
+                    {
+                        Debug.LogError($"[AndroidBuild] Invalid AAB: {reason}. " +
+                            "APK를 .aab로 바꿔 올리면 Play Console이 거부합니다. Build → Google Play AAB 로 다시 빌드하세요.");
+                        if (exitWhenDone) EditorApplication.Exit(5);
+                        return;
+                    }
+                }
+
                 Debug.Log($"[AndroidBuild] SUCCESS {summary.totalSize / (1024 * 1024)} MB in {summary.totalTime}");
-                EditorApplication.Exit(0);
+                Debug.Log($"[AndroidBuild] package={PackageName} bundleVersionCode={PlayerSettings.Android.bundleVersionCode}");
+                Debug.Log($"[AndroidBuild] Upload file: {output}");
+                if (exitWhenDone) EditorApplication.Exit(0);
             }
             else
             {
                 Debug.LogError($"[AndroidBuild] FAILED result={summary.result} errors={summary.totalErrors}");
-                EditorApplication.Exit(1);
+                if (exitWhenDone) EditorApplication.Exit(1);
             }
         }
         catch (Exception e)
         {
             Debug.LogError($"[AndroidBuild] EXCEPTION {e}");
-            EditorApplication.Exit(3);
+            if (exitWhenDone) EditorApplication.Exit(3);
         }
     }
 
+    static void ApplySettings(bool release, bool appBundle)
+    {
+        PlayerSettings.companyName = CompanyName;
+        PlayerSettings.productName = ProductName;
+
+        var android = NamedBuildTarget.Android;
+        PlayerSettings.SetApplicationIdentifier(android, PackageName);
+        PlayerSettings.SetScriptingBackend(android, ScriptingImplementation.IL2CPP);
+        PlayerSettings.Android.minSdkVersion = AndroidSdkVersions.AndroidApiLevel25;
+        PlayerSettings.Android.targetSdkVersion = AndroidSdkVersions.AndroidApiLevel35;
+        PlayerSettings.Android.targetArchitectures = AndroidArchitecture.ARM64;
+        PlayerSettings.Android.bundleVersionCode = Math.Max(6, PlayerSettings.Android.bundleVersionCode);
+
+        PlayerSettings.defaultInterfaceOrientation = UIOrientation.LandscapeLeft;
+        PlayerSettings.allowedAutorotateToLandscapeLeft = true;
+        PlayerSettings.allowedAutorotateToLandscapeRight = true;
+        PlayerSettings.allowedAutorotateToPortrait = false;
+        PlayerSettings.allowedAutorotateToPortraitUpsideDown = false;
+
+        EditorUserBuildSettings.buildAppBundle = appBundle;
+        EditorUserBuildSettings.androidBuildSubtarget = MobileTextureSubtarget.ASTC;
+        EditorUserBuildSettings.development = !release;
+        EditorUserBuildSettings.allowDebugging = !release;
+
+        ApplyKeystore(release);
+        ApplyAppIcon();
+    }
+
+    static void EnsureFleetCatalogForRelease()
+    {
+        FleetAssetBootstrap.LinkAllImportedAssetsSilent();
+
+        var catalog = Resources.Load<FleetVisualCatalog>("Fleet/Catalog");
+        if (catalog == null)
+        {
+            Debug.LogError("[AndroidBuild] Fleet catalog missing at Resources/Fleet/Catalog.asset");
+            return;
+        }
+
+        if (catalog.battleship == null || catalog.ufo == null || catalog.fighter == null)
+            Debug.LogError("[AndroidBuild] Fleet catalog has missing prefab refs. Run EarthSmasher → Link All Imported Assets.");
+        else
+            Debug.Log("[AndroidBuild] Fleet catalog OK for release build.");
+    }
+
+    static void ApplyAppIcon()
+    {
+        AssetDatabase.Refresh(ImportAssetOptions.ForceSynchronousImport | ImportAssetOptions.ForceUpdate);
+        AssetDatabase.ImportAsset(AppIconPath, ImportAssetOptions.ForceUpdate);
+        AssetDatabase.ImportAsset(AppIconBgPath, ImportAssetOptions.ForceUpdate);
+
+        var icon = AssetDatabase.LoadAssetAtPath<Texture2D>(AppIconPath);
+        var iconBg = AssetDatabase.LoadAssetAtPath<Texture2D>(AppIconBgPath);
+        if (icon == null)
+        {
+            Debug.LogError("[AndroidBuild] App icon not found: " + AppIconPath +
+                " (check .meta GUID is 32 hex characters)");
+            return;
+        }
+
+        if (iconBg == null)
+            iconBg = icon;
+
+        var platform = NamedBuildTarget.Android;
+        PlatformIcon[] adaptiveIcons = PlayerSettings.GetPlatformIcons(platform, AndroidPlatformIconKind.Adaptive);
+        for (int i = 0; i < adaptiveIcons.Length; i++)
+            adaptiveIcons[i].SetTextures(new[] { icon, iconBg });
+        PlayerSettings.SetPlatformIcons(platform, AndroidPlatformIconKind.Adaptive, adaptiveIcons);
+
+        Debug.Log("[AndroidBuild] App icon applied: " + AppIconPath);
+    }
+
+    /// <summary>AAB는 ZIP 형식이며 base/ 또는 BundleConfig.pb 가 있어야 한다.</summary>
+    static bool ValidateAppBundle(string path, out string reason)
+    {
+        reason = null;
+        if (string.IsNullOrEmpty(path) || !File.Exists(path))
+        {
+            reason = "file not found";
+            return false;
+        }
+
+        if (!path.EndsWith(".aab", StringComparison.OrdinalIgnoreCase))
+        {
+            reason = "extension is not .aab";
+            return false;
+        }
+
+        try
+        {
+            using ZipArchive zip = ZipFile.OpenRead(path);
+            bool hasBase = zip.Entries.Any(e =>
+                e.FullName.StartsWith("base/", StringComparison.OrdinalIgnoreCase)
+                || e.FullName.Equals("BundleConfig.pb", StringComparison.OrdinalIgnoreCase)
+                || e.FullName.EndsWith("/BundleConfig.pb", StringComparison.OrdinalIgnoreCase));
+            if (!hasBase)
+            {
+                reason = "missing base/ module (probably an APK renamed to .aab)";
+                return false;
+            }
+        }
+        catch (InvalidDataException)
+        {
+            reason = "not a valid zip/app bundle";
+            return false;
+        }
+
+        return true;
+    }
+
+    static void ApplyKeystore(bool release)
+    {
+        if (TryLoadKeystoreProps(out KeystoreProps props))
+        {
+            string keystorePath = Path.GetFullPath(props.KeystorePath);
+            if (!File.Exists(keystorePath))
+            {
+                Debug.LogError($"[AndroidBuild] Keystore not found: {keystorePath}");
+            }
+            else
+            {
+                PlayerSettings.Android.useCustomKeystore = true;
+                PlayerSettings.Android.keystoreName = keystorePath;
+                PlayerSettings.Android.keystorePass = props.KeystorePass;
+                PlayerSettings.Android.keyaliasName = props.KeyAlias;
+                PlayerSettings.Android.keyaliasPass = props.KeyAliasPass;
+                Debug.Log($"[AndroidBuild] Release signing: {props.KeyAlias} ({keystorePath})");
+                return;
+            }
+        }
+
+        PlayerSettings.Android.useCustomKeystore = false;
+        if (release)
+        {
+            Debug.LogWarning(
+                "[AndroidBuild] play-keystore.properties 없음 — 디버그 키로 AAB가 만들어집니다. " +
+                "Play Console 업로드용은 Build/android/play-keystore.properties.example 참고.");
+        }
+    }
+
+    struct KeystoreProps
+    {
+        public string KeystorePath;
+        public string KeystorePass;
+        public string KeyAlias;
+        public string KeyAliasPass;
+    }
+
+    static bool TryLoadKeystoreProps(out KeystoreProps props)
+    {
+        props = default;
+        string projectRoot = Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
+        string propsPath = Path.Combine(projectRoot, KeystorePropsRelative);
+        if (!File.Exists(propsPath))
+            return false;
+
+        var map = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        foreach (string line in File.ReadAllLines(propsPath))
+        {
+            string t = line.Trim();
+            if (t.Length == 0 || t.StartsWith("#"))
+                continue;
+            int eq = t.IndexOf('=');
+            if (eq <= 0)
+                continue;
+            map[t.Substring(0, eq).Trim()] = t.Substring(eq + 1).Trim();
+        }
+
+        if (!map.TryGetValue("keystorePath", out string path) || string.IsNullOrWhiteSpace(path))
+            return false;
+        if (!map.TryGetValue("keystorePass", out string storePass))
+            storePass = "";
+        if (!map.TryGetValue("keyAlias", out string alias) || string.IsNullOrWhiteSpace(alias))
+            return false;
+        if (!map.TryGetValue("keyAliasPass", out string aliasPass))
+            aliasPass = storePass;
+
+        props = new KeystoreProps
+        {
+            KeystorePath = path,
+            KeystorePass = storePass,
+            KeyAlias = alias,
+            KeyAliasPass = aliasPass
+        };
+        return true;
+    }
+
     /// <summary>
-    /// 이 프로젝트는 머티리얼을 전부 런타임에 Shader.Find로 만든다. 씬/에셋이 직접
-    /// 참조하지 않는 셰이더는 빌드에서 제거되어 폰에서 자홍색 덩어리만 남고,
-    /// new Material(null)이 예외를 던져 부트스트랩 전체가 죽는다.
-    /// 그래서 Always Included Shaders에 강제로 넣어준다.
+    /// 머티리얼을 전부 런타임에 Shader.Find로 만든다. Always Included Shaders에 강제 등록.
     /// </summary>
     static void EnsureShadersIncluded()
     {
-        // Shader.Find로 참조하는 내장 셰이더
         string[] builtIn =
         {
             "Standard",
@@ -84,7 +321,7 @@ public static class AndroidBuild
             "Universal Render Pipeline/Lit"
         };
 
-        var wanted = new System.Collections.Generic.List<Shader>();
+        var wanted = new List<Shader>();
 
         foreach (string guid in AssetDatabase.FindAssets("t:Shader", new[] { "Assets/Shaders" }))
         {
@@ -110,7 +347,7 @@ public static class AndroidBuild
         var so = new SerializedObject(settings);
         var list = so.FindProperty("m_AlwaysIncludedShaders");
 
-        var already = new System.Collections.Generic.HashSet<Shader>();
+        var already = new HashSet<Shader>();
         for (int i = 0; i < list.arraySize; i++)
         {
             var s = list.GetArrayElementAtIndex(i).objectReferenceValue as Shader;
@@ -126,7 +363,6 @@ public static class AndroidBuild
             list.InsertArrayElementAtIndex(list.arraySize);
             list.GetArrayElementAtIndex(list.arraySize - 1).objectReferenceValue = s;
             added++;
-            Debug.Log($"[AndroidBuild] always-include shader: {s.name}");
         }
 
         if (added > 0)
@@ -134,18 +370,10 @@ public static class AndroidBuild
             so.ApplyModifiedProperties();
             AssetDatabase.SaveAssets();
         }
-        Debug.Log($"[AndroidBuild] shaders always-included: {already.Count} (added {added})");
 
         EnsureStandardVariantsKept();
     }
 
-    /// <summary>
-    /// Always Included Shaders 는 셰이더 자체만 남기고, 프로젝트 에셋이 쓰지 않는
-    /// 키워드 변형은 그대로 제거한다. 이 프로젝트는 Standard 머티리얼을 전부
-    /// 런타임에 만들어서 _ALPHABLEND_ON / _EMISSION 변형이 통째로 사라지고,
-    /// 그러면 알파가 1로 강제되거나 발광이 안 먹는다.
-    /// ShaderVariantCollection 을 Preloaded Shaders 에 물려 변형을 보존한다.
-    /// </summary>
     static void EnsureStandardVariantsKept()
     {
         const string dir = "Assets/ShaderVariants";
@@ -168,7 +396,7 @@ public static class AndroidBuild
                 new[] { "_ALPHAPREMULTIPLY_ON" },
                 new[] { "_ALPHABLEND_ON", "_EMISSION" },
                 new[] { "_NORMALMAP" },
-                new string[0]
+                Array.Empty<string>()
             };
 
             var passes = new[]
@@ -177,7 +405,6 @@ public static class AndroidBuild
                 UnityEngine.Rendering.PassType.ForwardAdd
             };
 
-            int kept = 0;
             foreach (var pass in passes)
             {
                 foreach (string[] keywords in combos)
@@ -185,11 +412,10 @@ public static class AndroidBuild
                     try
                     {
                         svc.Add(new ShaderVariantCollection.ShaderVariant(standard, pass, keywords));
-                        kept++;
                     }
                     catch (Exception)
                     {
-                        // 존재하지 않는 조합은 조용히 건너뛴다.
+                        // skip invalid combo
                     }
                 }
             }
@@ -207,10 +433,11 @@ public static class AndroidBuild
             if (list == null)
                 return;
 
+            var asset = AssetDatabase.LoadAssetAtPath<ShaderVariantCollection>(path);
             bool present = false;
             for (int i = 0; i < list.arraySize; i++)
             {
-                if (list.GetArrayElementAtIndex(i).objectReferenceValue == svc)
+                if (list.GetArrayElementAtIndex(i).objectReferenceValue == asset)
                 {
                     present = true;
                     break;
@@ -220,13 +447,10 @@ public static class AndroidBuild
             if (!present)
             {
                 list.InsertArrayElementAtIndex(list.arraySize);
-                list.GetArrayElementAtIndex(list.arraySize - 1).objectReferenceValue =
-                    AssetDatabase.LoadAssetAtPath<ShaderVariantCollection>(path);
+                list.GetArrayElementAtIndex(list.arraySize - 1).objectReferenceValue = asset;
                 so.ApplyModifiedProperties();
                 AssetDatabase.SaveAssets();
             }
-
-            Debug.Log($"[AndroidBuild] Standard variants preloaded: {kept}");
         }
         catch (Exception e)
         {
@@ -234,14 +458,14 @@ public static class AndroidBuild
         }
     }
 
-    /// <summary>같은 스트리핑 조건에서 문제를 재현하기 위한 PC 빌드 (진단용).</summary>
+    /// <summary>진단용 Windows 빌드.</summary>
     public static void BuildWindows()
     {
         try
         {
             EnsureShadersIncluded();
-            PlayerSettings.companyName = "sunsoft";
-            PlayerSettings.productName = "Earth Smasher";
+            PlayerSettings.companyName = CompanyName;
+            PlayerSettings.productName = ProductName;
 
             string outDir = Path.GetFullPath(Path.Combine(Application.dataPath, "..", "Build", "Windows"));
             Directory.CreateDirectory(outDir);
@@ -272,32 +496,6 @@ public static class AndroidBuild
             Debug.LogError($"[AndroidBuild] WIN_EXCEPTION {e}");
             EditorApplication.Exit(3);
         }
-    }
-
-    static void ApplySettings()
-    {
-        PlayerSettings.companyName = "sunsoft";
-        PlayerSettings.productName = "Earth Smasher";
-
-        var android = NamedBuildTarget.Android;
-        PlayerSettings.SetApplicationIdentifier(android, PackageName);
-        PlayerSettings.SetScriptingBackend(android, ScriptingImplementation.IL2CPP);
-
-        PlayerSettings.Android.minSdkVersion = AndroidSdkVersions.AndroidApiLevel24;
-        PlayerSettings.Android.targetArchitectures = AndroidArchitecture.ARM64;
-        // 사이드로딩용 — 디버그 키스토어로 서명
-        PlayerSettings.Android.useCustomKeystore = false;
-        PlayerSettings.Android.bundleVersionCode = Math.Max(1, PlayerSettings.Android.bundleVersionCode);
-
-        // 가로 고정
-        PlayerSettings.defaultInterfaceOrientation = UIOrientation.LandscapeLeft;
-        PlayerSettings.allowedAutorotateToLandscapeLeft = true;
-        PlayerSettings.allowedAutorotateToLandscapeRight = true;
-        PlayerSettings.allowedAutorotateToPortrait = false;
-        PlayerSettings.allowedAutorotateToPortraitUpsideDown = false;
-
-        EditorUserBuildSettings.buildAppBundle = false;
-        EditorUserBuildSettings.androidBuildSubtarget = MobileTextureSubtarget.ASTC;
     }
 }
 #endif

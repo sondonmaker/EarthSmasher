@@ -20,4 +20,14 @@ git commit -m "your message"
 git push
 ```
 
-`Library/`, `Temp/`, `Logs/`, `Build/` 는 `.gitignore`로 제외됩니다.
+`Library/`, `Temp/`, `Build/Android/`, `Build/Windows/` 는 `.gitignore`로 제외됩니다.
+
+## Google Play 빌드
+
+→ [Docs/GOOGLE_PLAY_BUILD.md](Docs/GOOGLE_PLAY_BUILD.md)
+
+```powershell
+.\Build\android\build-play-aab.ps1
+```
+
+출력: `Build/Android/Release/EarthSmasher.aab`

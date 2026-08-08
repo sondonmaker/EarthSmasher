@@ -108,6 +108,41 @@ public static class LaserVfxSpawner
         return cat != null ? cat.sparks : null;
     }
 
+    public static GameObject ForBattleshipUfoBolt()
+    {
+        var cat = ResolveCatalog();
+        if (cat == null)
+            return null;
+        if (cat.projectileBolt != null)
+            return cat.projectileBolt;
+        if (cat.pierceBeam != null)
+            return cat.pierceBeam;
+        return cat.plasmaBeam;
+    }
+
+    public static void SpawnMuzzleFlash(Vector3 at, Vector3 toward, float scale)
+    {
+        var cat = ResolveCatalog();
+        if (cat == null || cat.muzzleFlash == null)
+            return;
+
+        Vector3 dir = toward - at;
+        var go = Object.Instantiate(cat.muzzleFlash);
+        go.name = cat.muzzleFlash.name + "_Muzzle";
+        go.transform.position = at;
+        if (dir.sqrMagnitude > 1e-6f)
+            go.transform.rotation = Quaternion.LookRotation(dir.normalized);
+        go.transform.localScale = Vector3.one * Mathf.Clamp(scale, 0.06f, 0.22f);
+        ImportedVfxMaterialFix.FixHierarchy(go);
+        PlayAllParticles(go, false);
+        Object.Destroy(go, 0.35f);
+    }
+
+    public static GameObject PierceImpactPrefab()
+    {
+        return ForKind(PlanetLaserKind.Pierce, impact: true);
+    }
+
     public static GameObject ForFleetStrike(StrikeImpactKind kind, bool impact)
     {
         var cat = ResolveCatalog();
@@ -123,7 +158,9 @@ public static class LaserVfxSpawner
                 StrikeImpactKind.BattleshipBeam => cat.sparks,
                 StrikeImpactKind.PlanetKiller => cat.fireImpact != null ? cat.fireImpact : cat.sparks,
                 StrikeImpactKind.VonNeumannProbe => cat.sparks,
-                StrikeImpactKind.UfoPop => cat.sparks,
+                StrikeImpactKind.UfoPop => cat.fireImpact != null
+                    ? cat.fireImpact
+                    : cat.sparks,
                 _ => cat.sparks
             };
         }
@@ -159,7 +196,7 @@ public static class LaserVfxSpawner
         StrikeImpactKind.BattleshipBeam => 0.026f,
         StrikeImpactKind.PlanetKiller => 0.042f,
         StrikeImpactKind.VonNeumannProbe => 0.018f,
-        StrikeImpactKind.UfoPop => 0.016f,
+        StrikeImpactKind.UfoPop => 0.012f,
         _ => 0.024f
     };
 

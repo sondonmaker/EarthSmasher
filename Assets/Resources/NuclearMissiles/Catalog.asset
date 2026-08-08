@@ -11,13 +11,13 @@ MonoBehaviour:
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: ed35acb61935d7245a6bf21e28bd4c7e, type: 3}
   m_Name: Catalog
-  m_EditorClassIdentifier: 
+  m_EditorClassIdentifier: Assembly-CSharp::NuclearMissileCatalog
   variants:
-  - {fileID: 100100000, guid: 50773f1d6bb3fd64ab39c2745d6d4fac, type: 3}
-  - {fileID: 100100000, guid: dc4d2fd4bb4f09b4fb18a1f4d749d848, type: 3}
-  - {fileID: 100100000, guid: f4320b7690a65e94583c182737737560, type: 3}
-  - {fileID: 100100000, guid: ffa4c8b44b3d6114ab73c4db2ff2a75e, type: 3}
-  - {fileID: 100100000, guid: feab32b9d1429374baf49395a545a262, type: 3}
-  - {fileID: 100100000, guid: d09b04d5d9836624ba6d05b713a19815, type: 3}
-  - {fileID: 100100000, guid: 6c88a2d7032886d4b8e46448bdbf44b7, type: 3}
-  - {fileID: 100100000, guid: ce80bcfee963e2e4796f95695e18542c, type: 3}
+  - {fileID: 6000589096665799354, guid: 50773f1d6bb3fd64ab39c2745d6d4fac, type: 3}
+  - {fileID: 2190757547637686331, guid: dc4d2fd4bb4f09b4fb18a1f4d749d848, type: 3}
+  - {fileID: 5243230312631615004, guid: f4320b7690a65e94583c182737737560, type: 3}
+  - {fileID: 8449734484887808375, guid: ffa4c8b44b3d6114ab73c4db2ff2a75e, type: 3}
+  - {fileID: 8733400420146065240, guid: feab32b9d1429374baf49395a545a262, type: 3}
+  - {fileID: 4148348672102278998, guid: d09b04d5d9836624ba6d05b713a19815, type: 3}
+  - {fileID: 474175007933319629, guid: 6c88a2d7032886d4b8e46448bdbf44b7, type: 3}
+  - {fileID: 3464917743516336698, guid: ce80bcfee963e2e4796f95695e18542c, type: 3}
