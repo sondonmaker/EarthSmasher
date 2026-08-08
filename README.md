@@ -1,34 +1,23 @@
-# 지구뿌수기 (EarthSmasher)
+# Earth Smasher (Unity)
 
-Unity 모바일 — 생생한 지구에 운석을 떨어뜨려 부수는 게임.
+**Unity 프로젝트 루트 = Git 저장소** — `EarthCrack` 폴더에서 Unity를 열고, 여기서 커밋·푸시합니다.
 
-## 지금 Play로 되는 것
+- GitHub: https://github.com/sondonmaker/EarthSmasher
+- Android package: `com.sunsoft.earthsmasher`
 
-1. Unity Hub에서 **3D (Built-in)** 로 이 폴더 열기
-2. 빈 씬에 `MeteorImpactBootstrap` 붙이기
-3. Play → 지구 탭
+## Unity Hub
 
-포함: 2K 지구 텍스처, 구름, 야간광, 운석 트레일, 충격파, 크레이터, 지각 파괴, HUD
+1. **Add** → `C:\Users\sunghwan\EarthCrack`
+2. 이전 `Documents\GitHub\EarthSmasher` 프로젝트는 사용하지 않습니다.
 
-세팅 상세: [Docs/MeteorImpactPrototype.md](Docs/MeteorImpactPrototype.md)
+## Git
 
-## 구조
-
-```
-Assets/
-  Resources/Earth/   # day / night / clouds
-  Scripts/
-    Core/            # Bootstrap
-    Gameplay/        # Earth, Meteor, Fracture, VFX
-    UI/              # ImpactHud
-Docs/
+```powershell
+cd C:\Users\sunghwan\EarthCrack
+git status
+git add -A
+git commit -m "your message"
+git push
 ```
 
-## 상태
-
-- [x] GitHub 레포
-- [x] 운석 낙하 프로토타입
-- [x] 고해상도 지구 텍스처
-- [x] Fracture + 임팩트 VFX
-- [ ] Unity Hub로 씬 저장 / 모바일 빌드
-- [ ] 본격 Destructible Mesh 에셋
+`Library/`, `Temp/`, `Logs/`, `Build/` 는 `.gitignore`로 제외됩니다.

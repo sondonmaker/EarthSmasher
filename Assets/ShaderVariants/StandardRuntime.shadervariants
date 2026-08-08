@@ -1,0 +1,33 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!200 &20000000
+ShaderVariantCollection:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_Name: StandardRuntime
+  m_Shaders:
+  - first: {fileID: 46, guid: 0000000000000000f000000000000000, type: 0}
+    second:
+      variants:
+      - keywords: 
+        passType: 4
+      - keywords: _ALPHABLEND_ON
+        passType: 4
+      - keywords: _ALPHABLEND_ON _EMISSION
+        passType: 4
+      - keywords: _ALPHAPREMULTIPLY_ON
+        passType: 4
+      - keywords: _EMISSION
+        passType: 4
+      - keywords: _NORMALMAP
+        passType: 4
+      - keywords: 
+        passType: 5
+      - keywords: _ALPHABLEND_ON
+        passType: 5
+      - keywords: _ALPHAPREMULTIPLY_ON
+        passType: 5
+      - keywords: _NORMALMAP
+        passType: 5

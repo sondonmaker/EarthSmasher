@@ -1,0 +1,16 @@
+fileFormatVersion: 2
+guid: 943c097650bb8b1489b8c07750068312
+timeCreated: 1506590862
+licenseType: Store
+NativeFormatImporter:
+  mainObjectFileID: 2100000
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
+AssetOrigin:
+  serializedVersion: 1
+  productId: 11711
+  packageName: Free SF Fighter
+  packageVersion: 04
+  assetPath: Assets/SF_Fighter/Materials/SciFi_Fighters-Fleet.mat
+  uploadId: 203411

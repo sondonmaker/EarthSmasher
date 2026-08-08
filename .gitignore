@@ -8,6 +8,7 @@
 [Uu]ser[Ss]ettings/
 [Mm]emoryCaptures/
 [Rr]ecordings/
+.utmp/
 
 # Asset meta noise / local
 *.pidb.meta

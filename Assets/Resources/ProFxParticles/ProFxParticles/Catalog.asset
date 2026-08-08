@@ -1,0 +1,26 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 0}
+  m_Name: Catalog
+  m_EditorClassIdentifier: Assembly-CSharp::ProFxParticleCatalog
+  meteorProjectile: {fileID: 100006, guid: ea7f0a965d6dbfa4fb82fbf7494fb222, type: 3}
+  showerProjectile: {fileID: 183818, guid: 64d48cc8be380db4c9285fafe8c3c0a8, type: 3}
+  meteorTrail: {fileID: 100000, guid: d8449a52c6981404d8381a2f418f8523, type: 3}
+  meteorImpact: {fileID: 100010, guid: d6a69ab869fa0154389da769608a22c5, type: 3}
+  smallMeteorImpact: {fileID: 100002, guid: 0f636752f9528854abba636cfbede33d, type: 3}
+  blastMedium: {fileID: 100010, guid: 14d59fd63a842674992eb9579f7b50c7, type: 3}
+  blastLarge: {fileID: 100000, guid: 10f42fca98dc28042b22d432c3e4095b, type: 3}
+  blastCinematic: {fileID: 100008, guid: 6676e2285ec9f8a4c90fd08653ba8464, type: 3}
+  blastArtillery: {fileID: 100000, guid: e4137441b3ca36d43b1159cba14e0568, type: 3}
+  portalSwirl: {fileID: 100002, guid: 72726e476163d4d7389f7c4d34380c17, type: 3}
+  vortexSwirl: {fileID: 100000, guid: 1a26ace046c4c6c4bb30186a02ceb5de, type: 3}
+  vortexImpact: {fileID: 100008, guid: 90d6be0259fe4e24185ac6be60610b9c, type: 3}

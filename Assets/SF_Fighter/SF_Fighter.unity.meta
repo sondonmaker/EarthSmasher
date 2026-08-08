@@ -1,0 +1,15 @@
+fileFormatVersion: 2
+guid: d43ec1eaeefa7344fa87232dc6eb1dab
+timeCreated: 1506590503
+licenseType: Store
+DefaultImporter:
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
+AssetOrigin:
+  serializedVersion: 1
+  productId: 11711
+  packageName: Free SF Fighter
+  packageVersion: 04
+  assetPath: Assets/SF_Fighter/SF_Fighter.unity
+  uploadId: 203411
