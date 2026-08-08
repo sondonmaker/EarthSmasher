@@ -21,10 +21,12 @@ public static class EarthTextureLoader
     }
     public static Texture2D Water => Load("Earth/earth_water");
     public static Texture2D Topology => Load("Earth/earth_topology");
+    public static Texture2D PlanetEarthFreeDay => LoadPlanetEarthFreeTexture("Earth2kTexture");
+    public static Texture2D PlanetEarthFreeNormal => LoadPlanetEarthFreeTexture("Earth2kNormal");
 
     public static Material CreateCrustMaterial(Texture2D dayOverride = null, Texture2D nightOverride = null)
     {
-        var day = dayOverride != null ? dayOverride : Day;
+        var day = dayOverride != null ? dayOverride : (PlanetEarthFreeDay != null ? PlanetEarthFreeDay : Day);
         var night = nightOverride != null ? nightOverride : Night;
 
         var space = Shader.Find("EarthSmasher/EarthFromSpace");
@@ -241,6 +243,24 @@ public static class EarthTextureLoader
 
         Debug.LogError("[EarthTextureLoader] No usable shader found at all.");
         return null;
+    }
+
+    static Texture2D LoadPlanetEarthFreeTexture(string fileName)
+    {
+        var tex = Resources.Load<Texture2D>("PlanetEarthFree/" + fileName);
+        if (tex != null)
+            return tex;
+
+#if UNITY_EDITOR
+        tex = UnityEditor.AssetDatabase.LoadAssetAtPath<Texture2D>(
+            $"Assets/Planet Earth Free/Materials/{fileName}.png");
+        if (tex != null)
+            return tex;
+
+        tex = UnityEditor.AssetDatabase.LoadAssetAtPath<Texture2D>(
+            $"Assets/Resources/PlanetEarthFree/{fileName}.png");
+#endif
+        return tex;
     }
 
     static Texture2D Load(string path)

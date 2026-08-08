@@ -166,21 +166,18 @@ public class MeteorImpactBootstrap : MonoBehaviour
 
     EarthPlanet CreateEarth()
     {
-        if (EarthPlanetFreeSetup.TryCreate(out GameObject earthGo, out Renderer rend, out Transform core))
-            return FinishEarthSetup(earthGo, rend, core, usePlanetEarthFreeLayers: true);
-
-        earthGo = GameObject.CreatePrimitive(PrimitiveType.Sphere);
+        var earthGo = GameObject.CreatePrimitive(PrimitiveType.Sphere);
         earthGo.name = "Earth";
         earthGo.transform.position = Vector3.zero;
         earthGo.transform.localScale = Vector3.one * 5f;
 
         EarthMeshBuilder.Upgrade(earthGo.GetComponent<MeshFilter>());
 
-        rend = earthGo.GetComponent<Renderer>();
+        var rend = earthGo.GetComponent<Renderer>();
         rend.material = EarthTextureLoader.CreateCrustMaterial(earthDayTexture, earthNightTexture);
         rend.receiveShadows = true;
 
-        core = CreateCoreSphere(earthGo.transform);
+        var core = CreateCoreSphere(earthGo.transform);
 
         var ocean = CreateLayerSphere("Ocean", earthGo.transform, 1.006f, EarthTextureLoader.CreateOceanMaterial(), false);
         ocean.SetActive(false);
@@ -193,7 +190,7 @@ public class MeteorImpactBootstrap : MonoBehaviour
 
         var aurora = CreateLayerSphere("Aurora", earthGo.transform, 1.04f, EarthTextureLoader.CreateAuroraMaterial(), false);
 
-        return FinishEarthSetup(earthGo, rend, core, usePlanetEarthFreeLayers: false, ocean, clouds, atmosphere, aurora);
+        return FinishEarthSetup(earthGo, rend, core, ocean, clouds, atmosphere, aurora);
     }
 
     static Transform CreateCoreSphere(Transform parent)
@@ -212,11 +209,10 @@ public class MeteorImpactBootstrap : MonoBehaviour
         GameObject earthGo,
         Renderer rend,
         Transform core,
-        bool usePlanetEarthFreeLayers,
-        GameObject ocean = null,
-        GameObject clouds = null,
-        GameObject atmosphere = null,
-        GameObject aurora = null)
+        GameObject ocean,
+        GameObject clouds,
+        GameObject atmosphere,
+        GameObject aurora)
     {
         if (rend != null)
             rend.receiveShadows = true;
@@ -236,19 +232,7 @@ public class MeteorImpactBootstrap : MonoBehaviour
         var layers = earthGo.GetComponent<EarthLayerController>();
         if (layers == null)
             layers = earthGo.AddComponent<EarthLayerController>();
-
-        if (usePlanetEarthFreeLayers)
-        {
-            layers.Bind(rend != null ? rend.gameObject : earthGo, null, null, null, null);
-            layers.cloudsEnabled = false;
-            layers.atmosphereEnabled = false;
-            layers.auroraEnabled = false;
-            layers.oceanEnabled = false;
-        }
-        else
-        {
-            layers.Bind(earthGo, ocean, clouds, atmosphere, aurora);
-        }
+        layers.Bind(earthGo, ocean, clouds, atmosphere, aurora);
 
         var panelGo = new GameObject("EarthControlPanel");
         var panel = panelGo.AddComponent<EarthControlPanel>();
